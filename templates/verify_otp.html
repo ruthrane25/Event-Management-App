@@ -1,0 +1,107 @@
+{% extends 'base.html' %}
+{% block title %}Verify Email — EventFlow{% endblock %}
+
+{% block content %}
+<div class="auth-container">
+    <div class="auth-card">
+        <div class="auth-header">
+            <i class="fas fa-shield-alt auth-icon"></i>
+            <h2>Verify Your Email</h2>
+            <p>We've sent a 6-digit code to <strong>{{ email }}</strong></p>
+        </div>
+
+        <form method="POST" class="auth-form" id="otpForm">
+            <div class="form-group">
+                <label class="form-label"><i class="fas fa-key"></i> Verification Code</label>
+                <div class="otp-input-group">
+                    <input type="text" name="otp" id="otpInput" class="form-input otp-field" 
+                           placeholder="000000" maxlength="6" pattern="\d{6}" required autofocus>
+                </div>
+                <p class="form-help">Enter the 6-digit code from your email.</p>
+            </div>
+
+            <button type="submit" class="btn btn-primary btn-full">
+                Verify & Create Account
+            </button>
+        </form>
+
+        <div class="auth-footer">
+            <p>Didn't receive the code? <a href="{{ url_for('resend_otp') }}" class="auth-link">Resend Code</a></p>
+            <a href="{{ url_for('register') }}" class="auth-link secondary-link"><i class="fas fa-arrow-left"></i> Use a different email</a>
+        </div>
+    </div>
+</div>
+
+<style>
+    .auth-container {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: calc(100vh - 120px);
+        padding: 20px;
+    }
+    .auth-card {
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        width: 100%;
+        max-width: 420px;
+        padding: 40px;
+        box-shadow: var(--shadow-lg);
+        text-align: center;
+    }
+    .auth-icon {
+        font-size: 3rem;
+        color: var(--primary);
+        margin-bottom: 20px;
+    }
+    .auth-header h2 {
+        font-size: 1.75rem;
+        font-weight: 800;
+        margin-bottom: 8px;
+    }
+    .auth-header p {
+        color: var(--text-secondary);
+        font-size: 0.95rem;
+    }
+    .auth-form {
+        margin-top: 30px;
+    }
+    .otp-input-group {
+        display: flex;
+        justify-content: center;
+        margin-bottom: 10px;
+    }
+    .otp-field {
+        text-align: center;
+        font-size: 1.5rem;
+        font-weight: 800;
+        letter-spacing: 0.5rem;
+        padding: 12px;
+        width: 100%;
+    }
+    .auth-footer {
+        margin-top: 24px;
+        font-size: 0.9rem;
+        color: var(--text-secondary);
+    }
+    .secondary-link {
+        display: block;
+        margin-top: 20px;
+        color: var(--text-muted);
+    }
+    .auth-link:hover {
+        color: var(--primary);
+        text-decoration: underline;
+    }
+</style>
+
+<script>
+    // Simple auto-submit when 6 digits are entered
+    document.getElementById('otpInput').addEventListener('input', (e) => {
+        if(e.target.value.length === 6) {
+            document.getElementById('otpForm').submit();
+        }
+    });
+</script>
+{% endblock %}

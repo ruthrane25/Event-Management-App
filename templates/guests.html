@@ -1,0 +1,528 @@
+{% extends 'base.html' %}
+{% block title %}Guests — {{ event.name }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb"><a href="{{ url_for('dashboard') }}">Dashboard</a> / <a
+                href="{{ url_for('event_dashboard', event_id=event.id) }}">{{ event.name }}</a> / Guests</div>
+        <h1 class="page-title"><i class="fas fa-users"></i> Guest Management</h1>
+    </div>
+</div>
+
+<!-- Event Nav -->
+<div class="event-nav">
+    <a href="{{ url_for('event_dashboard', event_id=event.id) }}" class="event-nav-item">
+        <i class="fas fa-tachometer-alt"></i> Dashboard
+    </a>
+    <a href="{{ url_for('guests', event_id=event.id) }}" class="event-nav-item active">
+        <i class="fas fa-users"></i> Guests
+    </a>
+    <a href="{{ url_for('stay', event_id=event.id) }}" class="event-nav-item">
+        <i class="fas fa-bed"></i> Stay
+    </a>
+    {% if is_admin %}
+    <a href="{{ url_for('travel', event_id=event.id) }}" class="event-nav-item">
+        <i class="fas fa-train"></i> Travel
+    </a>
+    {% endif %}
+    <a href="{{ url_for('notifications', event_id=event.id) }}" class="event-nav-item">
+        <i class="fas fa-bell"></i> Notifications
+    </a>
+</div>
+
+<!-- Stats -->
+<div class="stats-row">
+    <div class="stat-card">
+        <div class="stat-icon" style="background: var(--primary-soft)"><i class="fas fa-users"
+                style="color:var(--primary)"></i></div>
+        <div class="stat-info">
+            <div class="stat-num" id="statTotal">{{ total_guests }}</div>
+            <div class="stat-label">Total Guests</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon" style="background:#e0f2fe"><i class="fas fa-user" style="color:#0284c7"></i></div>
+        <div class="stat-info">
+            <div class="stat-num" id="statIndividuals">{{ total_individuals }}</div>
+            <div class="stat-label">Individuals</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon" style="background:#fef3c7"><i class="fas fa-home" style="color:#d97706"></i></div>
+        <div class="stat-info">
+            <div class="stat-num" id="statFamilies">{{ total_families }}</div>
+            <div class="stat-label">Families</div>
+        </div>
+    </div>
+</div>
+
+<!-- Add Guest Button -->
+<div class="section-toolbar">
+    <h2 class="section-title">All Guests</h2>
+    {% if member.status == 'approved' %}
+    <button class="btn btn-primary" onclick="openAddGuestModal()" id="addGuestBtn">
+        <i class="fas fa-user-plus"></i> Add Guest
+    </button>
+    {% endif %}
+</div>
+
+<!-- Guest Tabs -->
+<div class="tabs-wrapper">
+    <div class="tabs-header">
+        <button class="tab-btn active" onclick="switchGuestTab('all', this)">
+            <i class="fas fa-list"></i> All Guests
+            <span class="tab-badge">{{ guests | length }}</span>
+        </button>
+        {% if member.status == 'approved' %}
+        <button class="tab-btn" onclick="switchGuestTab('coming', this)">
+            <i class="fas fa-check-circle" style="color:#22c55e"></i> Coming
+            <span class="tab-badge" style="background:rgba(34,197,94,0.15);color:#22c55e">
+                {{ guests | selectattr('coming_status', 'equalto', 'yes') | list | length }}
+            </span>
+        </button>
+        <button class="tab-btn" onclick="switchGuestTab('not-coming', this)">
+            <i class="fas fa-times-circle" style="color:#ef4444"></i> Not Coming
+            <span class="tab-badge" style="background:rgba(239,68,68,0.15);color:#ef4444">
+                {{ guests | selectattr('coming_status', 'equalto', 'no') | list | length }}
+            </span>
+        </button>
+        {% endif %}
+    </div>
+
+    <!-- All Guests Tab -->
+    <div class="tab-panel" id="tab-all">
+        <div class="guest-list" id="guestList">
+            {% for guest in guests %}
+            <div class="guest-card" id="guest-card-{{ guest.id }}" data-coming="{{ guest.coming_status }}"
+                data-id="{{ guest.id }}" data-is-family="{{ guest.is_family|lower }}">
+                <div class="guest-avatar {% if guest.is_family %}family-avatar{% endif %}">
+                    <i class="fas fa-{% if guest.is_family %}home{% else %}user{% endif %}"></i>
+                </div>
+                <div class="guest-info">
+                    <div class="guest-name">
+                        {{ guest.name }}
+                        {% if guest.is_family %}
+                        <span class="family-tag">Family</span>
+                        {% endif %}
+                    </div>
+                    {% if guest.is_family %}
+                    <div class="family-members-list">
+                        {% set fmembers = guest.family_members | from_json %}
+                        {% for fm in fmembers %}
+                        <span class="family-member-chip"><i class="fas fa-user-circle"></i> {{ fm }}</span>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                    <div class="guest-meta">
+                        <span class="guest-date"><i class="fas fa-clock"></i> {{ guest.created_at.strftime('%b %d')
+                            }}</span>
+                        {% if guest.coming_status == 'yes' %}
+                        <span class="status-chip status-yes">
+                            <i class="fas fa-check"></i> Coming
+                        </span>
+                        {% elif guest.coming_status == 'no' %}
+                        <span class="status-chip status-no">
+                            <i class="fas fa-times"></i> Not Coming
+                        </span>
+                        {% endif %}
+                    </div>
+                </div>
+                {% if is_admin_or_manager or guest.added_by == current_user.id %}
+                <div class="guest-actions">
+                    <button class="icon-btn" 
+                        data-id="{{ guest.id }}"
+                        data-name="{{ guest.name }}"
+                        data-is-family="{{ 'true' if guest.is_family else 'false' }}"
+                        data-family-members='{{ guest.family_members|safe if guest.family_members else "[]" }}'
+                        onclick="openEditGuestModal(this)" title="Edit">
+                        <i class="fas fa-edit"></i>
+                    </button>
+                    <button class="icon-btn red" data-event-id="{{ event.id }}" data-guest-id="{{ guest.id }}"
+                        onclick="deleteGuest(this)" title="Delete">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+
+            {% if not guests %}
+            <div class="empty-state">
+                <div class="empty-icon"><i class="fas fa-user-slash"></i></div>
+                <h3>No guests yet</h3>
+                <p>Add your first guest to get started</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if member.status == 'approved' %}
+    <!-- Coming Tab — only shows guests explicitly marked YES -->
+    <div class="tab-panel hidden" id="tab-coming">
+        <div class="coming-list" id="comingList">
+            {% set coming_guests = guests | selectattr('coming_status', 'ne', 'no') | list %}
+            {% if coming_guests %}
+            {% for guest in coming_guests %}
+            <div class="guest-row" id="cr-{{ guest.id }}" data-id="{{ guest.id }}">
+                <div class="guest-row-info">
+                    <i class="fas fa-{% if guest.is_family %}home{% else %}user{% endif %} guest-row-icon"></i>
+                    <span>{{ guest.name }}</span>
+                    {% if guest.is_family %}<span class="family-tag">Family</span>{% endif %}
+                    {% if guest.coming_status == 'yes' %}
+                    <span class="status-chip status-yes" style="font-size:0.7rem;padding:2px 8px">
+                        <i class="fas fa-check"></i> Confirmed
+                    </span>
+                    {% endif %}
+                </div>
+                <div class="toggle-wrap" style="gap:8px">
+                    <span class="toggle-label">Coming?</span>
+                    <label class="toggle-switch">
+                        <input type="checkbox" {% if guest.coming_status=='yes' %}checked{% endif %}
+                            data-event-id="{{ event.id }}" data-guest-id="{{ guest.id }}" data-tab="coming"
+                            onchange="updateComing(this, this.checked ? 'yes' : '')" />
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+            </div>
+            {% endfor %}
+            {% else %}
+            <div class="empty-state small">
+                <div class="empty-icon"><i class="fas fa-calendar-times"></i></div>
+                <p>No guests to show here yet</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Not Coming Tab — only shows guests explicitly marked NO -->
+    <div class="tab-panel hidden" id="tab-not-coming">
+        <div class="not-coming-list" id="notComingList">
+            {% set not_coming_guests = guests | selectattr('coming_status', 'ne', 'yes') | list %}
+            {% if not_coming_guests %}
+            {% for guest in not_coming_guests %}
+            <div class="guest-row" id="ncr-{{ guest.id }}" data-id="{{ guest.id }}">
+                <div class="guest-row-info">
+                    <i class="fas fa-{% if guest.is_family %}home{% else %}user{% endif %} guest-row-icon"></i>
+                    <span>{{ guest.name }}</span>
+                    {% if guest.is_family %}<span class="family-tag">Family</span>{% endif %}
+                    {% if guest.coming_status == 'no' %}
+                    <span class="status-chip status-no" style="font-size:0.7rem;padding:2px 8px">
+                        <i class="fas fa-times"></i> Declined
+                    </span>
+                    {% endif %}
+                </div>
+                <div class="toggle-wrap" style="gap:8px">
+                    <span class="toggle-label">Not Coming?</span>
+                    <label class="toggle-switch">
+                        <input type="checkbox" {% if guest.coming_status=='no' %}checked{% endif %}
+                            data-event-id="{{ event.id }}" data-guest-id="{{ guest.id }}" data-tab="not-coming"
+                            onchange="updateComing(this, this.checked ? 'no' : '')" />
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+            </div>
+            {% endfor %}
+            {% else %}
+            <div class="empty-state small">
+                <div class="empty-icon"><i class="fas fa-calendar-check"></i></div>
+                <p>No guests declined yet</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Add Guest Modal -->
+<div class="modal-overlay hidden" id="addGuestModal">
+    <div class="modal">
+        <div class="modal-header">
+            <h3><i class="fas fa-user-plus"></i> Add New Guest</h3>
+            <button class="modal-close" onclick="closeAddGuestModal()"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+                <label class="form-label">Full Name</label>
+                <input type="text" class="form-input" id="guestName" placeholder="e.g. Mandar Rane"
+                    autocomplete="off" />
+            </div>
+
+            <div class="form-group">
+                <label class="toggle-wrap">
+                    <span class="form-label" style="margin-bottom:0">Is this a family?</span>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="isFamilyToggle" onchange="toggleFamilySection()" />
+                        <span class="toggle-slider"></span>
+                    </label>
+                </label>
+            </div>
+
+            <div id="familySection" class="hidden">
+                <div class="form-group">
+                    <label class="form-label">Family Members</label>
+                    <div class="family-add-row">
+                        <input type="text" class="form-input" id="familyMemberInput"
+                            placeholder="Add member..." autocomplete="off" />
+                        <button class="btn btn-ghost" type="button" onclick="addFamilyMember()">
+                            <i class="fas fa-plus"></i>
+                        </button>
+                    </div>
+                    <div class="family-chips" id="familyChips"></div>
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-ghost" onclick="closeAddGuestModal()">Cancel</button>
+            <button class="btn btn-primary" data-event-id="{{ event.id }}" onclick="submitGuest(this)">
+                <i class="fas fa-check"></i> Add Guest
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Guest Modal -->
+<div class="modal-overlay hidden" id="editGuestModal">
+    <div class="modal">
+        <div class="modal-header">
+            <h3><i class="fas fa-edit"></i> Edit Guest</h3>
+            <button class="modal-close" onclick="closeEditGuestModal()"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="modal-body">
+            <input type="hidden" id="editGuestId">
+            <div class="form-group">
+                <label class="form-label">Guest Name</label>
+                <input type="text" class="form-input" id="editGuestName" placeholder="Full name" autocomplete="off" />
+            </div>
+            <div id="editFamilySection" class="hidden">
+                <div class="form-group">
+                    <label class="form-label">Family Members</label>
+                    <div class="family-add-row">
+                        <input type="text" class="form-input" id="editFamilyMemberInput"
+                            placeholder="Add member..." autocomplete="off" />
+                        <button class="btn btn-ghost" type="button" onclick="addEditFamilyMember()">
+                            <i class="fas fa-plus"></i>
+                        </button>
+                    </div>
+                    <div class="family-chips" id="editFamilyChips"></div>
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-ghost" onclick="closeEditGuestModal()">Cancel</button>
+            <button class="btn btn-primary" onclick="submitEditGuest()">
+                <i class="fas fa-save"></i> Save Changes
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Embed server-side values cleanly for JS to read -->
+<div id="pageData" data-event-id="{{ event.id }}" data-is-admin="{{ 'true' if is_admin else 'false' }}" hidden></div>
+
+<script>
+    const _pd = document.getElementById('pageData');
+    const eventId = _pd.dataset.eventId;
+    const isAdmin = _pd.dataset.isAdmin === 'true';
+    let familyMembers = [];
+    let editFamilyMembers = [];
+
+    function switchGuestTab(tab, btn) {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.tab-panel').forEach(p => p.classList.add('hidden'));
+        btn.classList.add('active');
+        document.getElementById('tab-' + tab).classList.remove('hidden');
+    }
+
+    function openAddGuestModal() {
+        familyMembers = [];
+        document.getElementById('guestName').value = '';
+        document.getElementById('isFamilyToggle').checked = false;
+        document.getElementById('familySection').classList.add('hidden');
+        document.getElementById('familyMemberInput').value = '';
+        document.getElementById('familyChips').innerHTML = '';
+        document.getElementById('addGuestModal').classList.remove('hidden');
+        // Focus after modal is visible
+        setTimeout(() => document.getElementById('guestName').focus(), 50);
+    }
+
+    function closeAddGuestModal() {
+        document.getElementById('addGuestModal').classList.add('hidden');
+    }
+
+    function toggleFamilySection() {
+        const show = document.getElementById('isFamilyToggle').checked;
+        document.getElementById('familySection').classList.toggle('hidden', !show);
+        if (show) setTimeout(() => document.getElementById('familyMemberInput').focus(), 50);
+    }
+
+    function addFamilyMember() {
+        const inp = document.getElementById('familyMemberInput');
+        const name = inp.value.trim();
+        if (!name) return;
+        familyMembers.push(name);
+        inp.value = '';
+        inp.focus();
+        renderFamilyChips();
+    }
+
+    function removeFamilyMember(idx) {
+        familyMembers.splice(idx, 1);
+        renderFamilyChips();
+    }
+
+    function renderFamilyChips() {
+        const container = document.getElementById('familyChips');
+        container.innerHTML = familyMembers.map((m, i) =>
+            `<span class="family-member-chip">${m}
+                <button type="button" onclick="removeFamilyMember(${i})" class="chip-remove" title="Remove">&times;</button>
+             </span>`
+        ).join('');
+    }
+
+    function openEditGuestModal(btn) {
+        editFamilyMembers = [];
+        const id = btn.dataset.id;
+        const name = btn.dataset.name;
+        const isFamily = btn.dataset.isFamily === 'true';
+        const familyJson = btn.dataset.familyMembers;
+
+        document.getElementById('editGuestId').value = id;
+        document.getElementById('editGuestName').value = name;
+        
+        if (isFamily) {
+            document.getElementById('editFamilySection').classList.remove('hidden');
+            try {
+                editFamilyMembers = JSON.parse(familyJson || '[]');
+            } catch(e) { editFamilyMembers = []; }
+            renderEditFamilyChips();
+        } else {
+            document.getElementById('editFamilySection').classList.add('hidden');
+        }
+        
+        document.getElementById('editGuestModal').classList.remove('hidden');
+    }
+
+    function closeEditGuestModal() {
+        document.getElementById('editGuestModal').classList.add('hidden');
+    }
+
+    function addEditFamilyMember() {
+        const inp = document.getElementById('editFamilyMemberInput');
+        const name = inp.value.trim();
+        if (!name) return;
+        editFamilyMembers.push(name);
+        inp.value = '';
+        inp.focus();
+        renderEditFamilyChips();
+    }
+
+    function removeEditFamilyMember(idx) {
+        editFamilyMembers.splice(idx, 1);
+        renderEditFamilyChips();
+    }
+
+    function renderEditFamilyChips() {
+        const container = document.getElementById('editFamilyChips');
+        container.innerHTML = editFamilyMembers.map((m, i) =>
+            `<span class="family-member-chip">${m}
+                <button type="button" onclick="removeEditFamilyMember(${i})" class="chip-remove" title="Remove">&times;</button>
+             </span>`
+        ).join('');
+    }
+
+    // Attach Enter key listener after DOM is ready
+    document.addEventListener('DOMContentLoaded', function () {
+        const fmInput = document.getElementById('familyMemberInput');
+        if (fmInput) {
+            fmInput.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    addFamilyMember();
+                }
+            });
+        }
+        const efmInput = document.getElementById('editFamilyMemberInput');
+        if (efmInput) {
+            efmInput.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    addEditFamilyMember();
+                }
+            });
+        }
+    });
+
+    async function submitGuest(btn) {
+        const eid = btn.dataset.eventId;
+        const name = document.getElementById('guestName').value.trim();
+        const isFamily = document.getElementById('isFamilyToggle').checked;
+        if (!name) { showToast('Please enter a guest name', 'error'); return; }
+        const res = await fetch(`/event/${eid}/guests/add`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, is_family: isFamily, family_members: familyMembers })
+        });
+        const data = await res.json();
+        if (data.success) {
+            closeAddGuestModal();
+            showToast('Guest added!', 'success');
+            setTimeout(() => location.reload(), 600);
+        } else {
+            showToast(data.error || 'Failed to add guest', 'error');
+        }
+    }
+
+    async function submitEditGuest() {
+        const guestId = document.getElementById('editGuestId').value;
+        const name = document.getElementById('editGuestName').value.trim();
+        if (!name) { showToast('Name is required', 'error'); return; }
+        
+        const res = await fetch(`/event/${eventId}/guests/${guestId}/update`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, family_members: editFamilyMembers })
+        });
+        const data = await res.json();
+        if (data.success) {
+            closeEditGuestModal();
+            showToast('Guest updated!', 'success');
+            setTimeout(() => location.reload(), 600);
+        } else {
+            showToast(data.error || 'Update failed', 'error');
+        }
+    }
+
+    async function deleteGuest(btn) {
+        const eid = btn.dataset.eventId;
+        const guestId = btn.dataset.guestId;
+        if (!confirm('Delete this guest? This cannot be undone.')) return;
+        const res = await fetch(`/event/${eid}/guests/${guestId}/delete`, { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+            const card = document.getElementById('guest-card-' + guestId);
+            if (card) {
+                card.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
+                card.style.opacity = '0';
+                card.style.transform = 'translateX(10px)';
+                setTimeout(() => card.remove(), 300);
+            }
+            showToast('Guest removed.', 'info');
+        }
+    }
+
+    async function updateComing(checkbox, status) {
+        const eid = checkbox.dataset.eventId;
+        const guestId = checkbox.dataset.guestId;
+        const res = await fetch(`/event/${eid}/guests/${guestId}/update`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ coming_status: status })
+        });
+        if (res.ok) {
+            showToast('Status updated!', 'success');
+            setTimeout(() => location.reload(), 500);
+        }
+    }
+</script>
+{% endblock %}

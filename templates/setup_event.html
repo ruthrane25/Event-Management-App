@@ -1,0 +1,71 @@
+{% extends 'base.html' %}
+{% block title %}Setup Event{% endblock %}
+
+{% block content %}
+<div class="setup-page">
+    <div class="setup-card">
+        <div class="setup-header">
+            <div class="setup-icon"><i class="fas fa-calendar-plus"></i></div>
+            <h2>Get Started</h2>
+            <p>Create a new event or join an existing one</p>
+        </div>
+
+        <div class="setup-tabs">
+            <button class="setup-tab active" onclick="switchSetupTab('create', this)" id="tab-create">
+                <i class="fas fa-plus-circle"></i> Create Event
+            </button>
+            <button class="setup-tab" onclick="switchSetupTab('join', this)" id="tab-join">
+                <i class="fas fa-door-open"></i> Join Event
+            </button>
+        </div>
+
+        <!-- Create Event Form -->
+        <div class="setup-panel" id="panel-create">
+            <form method="POST" action="{{ url_for('setup_event') }}">
+                <input type="hidden" name="action" value="create" />
+                <div class="form-group">
+                    <label class="form-label"><i class="fas fa-star"></i> Event Name</label>
+                    <input type="text" name="event_name" class="form-input"
+                        placeholder="e.g. Annual Family Reunion 2024" required id="eventNameInput" />
+                </div>
+                <div class="setup-note">
+                    <i class="fas fa-info-circle"></i>
+                    <span>You'll become the <strong>Admin</strong> of this event and receive a unique event code.</span>
+                </div>
+                <button type="submit" class="btn btn-primary btn-full">
+                    <i class="fas fa-rocket"></i> Create & Become Admin
+                </button>
+            </form>
+        </div>
+
+        <!-- Join Event Form -->
+        <div class="setup-panel hidden" id="panel-join">
+            <form method="POST" action="{{ url_for('setup_event') }}">
+                <input type="hidden" name="action" value="join" />
+                <div class="form-group">
+                    <label class="form-label"><i class="fas fa-key"></i> Event Unique Code</label>
+                    <input type="text" name="event_code" class="form-input" placeholder="Enter 8-character event code"
+                        maxlength="8" style="text-transform:uppercase; letter-spacing:4px; font-size:1.2rem;" required
+                        id="eventCodeInput" />
+                </div>
+                <div class="setup-note">
+                    <i class="fas fa-info-circle"></i>
+                    <span>Your request will be sent to the event admin for approval.</span>
+                </div>
+                <button type="submit" class="btn btn-secondary btn-full">
+                    <i class="fas fa-paper-plane"></i> Send Join Request
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    function switchSetupTab(tab, btn) {
+        document.querySelectorAll('.setup-tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.setup-panel').forEach(p => p.classList.add('hidden'));
+        btn.classList.add('active');
+        document.getElementById('panel-' + tab).classList.remove('hidden');
+    }
+</script>
+{% endblock %}

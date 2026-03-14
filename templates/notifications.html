@@ -1,0 +1,149 @@
+{% extends 'base.html' %}
+{% block title %}Notifications — {{ event.name }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{{ url_for('dashboard') }}">Dashboard</a> / 
+            <a href="{{ url_for('event_dashboard', event_id=event.id) }}">{{ event.name }}</a> / 
+            Notifications
+        </div>
+        <h1 class="page-title"><i class="fas fa-bell"></i> Notifications</h1>
+    </div>
+</div>
+
+<!-- Event Nav -->
+<div class="event-nav">
+    <a href="{{ url_for('event_dashboard', event_id=event.id) }}" class="event-nav-item">
+        <i class="fas fa-tachometer-alt"></i> Dashboard
+    </a>
+    <a href="{{ url_for('guests', event_id=event.id) }}" class="event-nav-item">
+        <i class="fas fa-users"></i> Guests
+    </a>
+    <a href="{{ url_for('stay', event_id=event.id) }}" class="event-nav-item">
+        <i class="fas fa-bed"></i> Stay
+    </a>
+    <a href="{{ url_for('notifications', event_id=event.id) }}" class="event-nav-item active">
+        <i class="fas fa-bell"></i> Notifications
+    </a>
+</div>
+
+<div class="notifications-container">
+    {% if notifications %}
+    <div class="notifications-list">
+        {% for notif in notifications %}
+        <div class="notif-card {% if not notif.is_read %}unread{% endif %}" id="notif-{{ notif.id }}">
+            <div class="notif-avatar">
+                {{ notif.sender.name[0].upper() }}
+            </div>
+            <div class="notif-content">
+                <div class="notif-header">
+                    <span class="notif-sender">{{ notif.sender.name }}</span>
+                    <span class="notif-time">{{ notif.created_at.strftime('%b %d, %H:%M') }}</span>
+                </div>
+                <div class="notif-message">
+                    {{ notif.message }}
+                </div>
+            </div>
+            {% if not notif.is_read %}
+            <div class="unread-dot"></div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <div class="empty-icon"><i class="fas fa-bell-slash"></i></div>
+        <h3>No notifications</h3>
+        <p>You're all caught up!</p>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+    // Mark all as read when opening the page
+    document.addEventListener('DOMContentLoaded', async () => {
+        const res = await fetch(`/event/{{ event.id }}/notifications/mark-read`, { method: 'POST' });
+        if (res.ok) {
+            // Success
+        }
+    });
+</script>
+
+<style>
+    .notifications-container {
+        max-width: 800px;
+        margin: 0 auto;
+        padding-bottom: 2rem;
+    }
+    .notif-card {
+        background: var(--bg-card);
+        border-radius: var(--radius);
+        padding: 1.25rem 1.5rem;
+        margin-bottom: 1rem;
+        display: flex;
+        gap: 1.25rem;
+        align-items: flex-start;
+        box-shadow: var(--shadow);
+        border: 1px solid var(--border);
+        transition: var(--transition);
+        position: relative;
+    }
+    .notif-card:hover {
+        transform: translateY(-2px);
+        border-color: var(--primary);
+    }
+    .notif-card.unread {
+        border-left: 4px solid var(--primary);
+        background: var(--bg-card-2);
+    }
+    .notif-avatar {
+        width: 44px;
+        height: 44px;
+        background: linear-gradient(135deg, var(--primary), var(--secondary));
+        color: white;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        font-size: 1.1rem;
+        flex-shrink: 0;
+    }
+    .notif-content {
+        flex: 1;
+    }
+    .notif-header {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 0.5rem;
+        align-items: center;
+    }
+    .notif-sender {
+        font-weight: 700;
+        color: var(--text-primary);
+    }
+    .notif-time {
+        font-size: 0.8rem;
+        color: var(--text-secondary);
+    }
+    .notif-message {
+        font-size: 0.95rem;
+        color: var(--text-primary);
+        opacity: 0.9;
+        line-height: 1.6;
+        white-space: pre-wrap;
+    }
+    .unread-dot {
+        position: absolute;
+        top: 1.25rem;
+        right: 1.25rem;
+        width: 10px;
+        height: 10px;
+        background: var(--primary);
+        border-radius: 50%;
+        box-shadow: 0 0 10px var(--primary);
+    }
+</style>
+{% endblock %}

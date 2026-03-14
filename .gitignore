@@ -1,0 +1,15 @@
+# Local database
+*.db
+
+# Python 
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+ENV/
+
+# Environment variables
+.env
+
+# Vercel
+.vercel

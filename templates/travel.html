@@ -1,0 +1,199 @@
+{% extends 'base.html' %}
+{% block title %}Travel — {{ event.name }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb"><a href="{{ url_for('dashboard') }}">Dashboard</a> / <a
+                href="{{ url_for('event_dashboard', event_id=event.id) }}">{{ event.name }}</a> / Travel</div>
+        <h1 class="page-title"><i class="fas fa-train"></i> Travel Management</h1>
+    </div>
+</div>
+
+<!-- Event Nav -->
+<div class="event-nav">
+    <a href="{{ url_for('event_dashboard', event_id=event.id) }}" class="event-nav-item">
+        <i class="fas fa-tachometer-alt"></i> Dashboard
+    </a>
+    <a href="{{ url_for('guests', event_id=event.id) }}" class="event-nav-item">
+        <i class="fas fa-users"></i> Guests
+    </a>
+    <a href="{{ url_for('stay', event_id=event.id) }}" class="event-nav-item">
+        <i class="fas fa-bed"></i> Stay
+    </a>
+    <a href="{{ url_for('travel', event_id=event.id) }}" class="event-nav-item active">
+        <i class="fas fa-train"></i> Travel
+    </a>
+    <a href="{{ url_for('notifications', event_id=event.id) }}" class="event-nav-item">
+        <i class="fas fa-bell"></i> Notifications
+    </a>
+</div>
+
+<div class="section">
+    <div class="travel-stats">
+        <div class="stat-card">
+            <div class="stat-icon" style="background:#dbeafe"><i class="fas fa-train" style="color:#2563eb"></i></div>
+            <div class="stat-info">
+                <div class="stat-num" id="trainCount">{{ guests | selectattr('travel_mode', 'equalto', 'Train') | list |
+                    length }}</div>
+                <div class="stat-label">By Train</div>
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon" style="background:#dcfce7"><i class="fas fa-car" style="color:#16a34a"></i></div>
+            <div class="stat-info">
+                <div class="stat-num" id="carCount">{{ guests | selectattr('travel_mode', 'equalto', 'Car') | list |
+                    length }}</div>
+                <div class="stat-label">By Car</div>
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon" style="background:#fef9c3"><i class="fas fa-ticket-alt" style="color:#ca8a04"></i>
+            </div>
+            <div class="stat-info">
+                <div class="stat-num" id="ticketDone">{{ guests | selectattr('ticket_status', 'equalto', 'done') | list
+                    | length }}</div>
+                <div class="stat-label">Tickets Done</div>
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon" style="background:#fee2e2"><i class="fas fa-exclamation-circle"
+                    style="color:#dc2626"></i></div>
+            <div class="stat-info">
+                <div class="stat-num" id="ticketPending">{{ guests | selectattr('ticket_status', 'equalto', 'pending') |
+                    list | length }}</div>
+                <div class="stat-label">Tickets Pending</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="travel-list">
+        {% for guest in guests %}
+        <div class="travel-card" id="tc-{{ guest.id }}">
+            <div class="travel-guest-info">
+                <div class="guest-avatar {% if guest.is_family %}family-avatar{% endif %}">
+                    <i class="fas fa-{% if guest.is_family %}home{% else %}user{% endif %}"></i>
+                </div>
+                <div>
+                    <strong>{{ guest.name }}</strong>
+                    {% if guest.parent_id %}<span class="guest-parent-info">({{ guest.parent.name }}'s Family)</span>{% endif %}
+                </div>
+            </div>
+
+            <div class="travel-options">
+                <!-- Travel Mode -->
+                <div class="travel-mode-selector">
+                    <button class="mode-btn {% if guest.travel_mode == 'Train' %}active train-active{% endif %}"
+                        data-event-id="{{ event.id }}" data-guest-id="{{ guest.id }}" onclick="setTravel(this, 'Train')"
+                        id="train-{{ guest.id }}">
+                        <i class="fas fa-train"></i> Train
+                    </button>
+                    <button class="mode-btn {% if guest.travel_mode == 'Car' %}active car-active{% endif %}"
+                        data-event-id="{{ event.id }}" data-guest-id="{{ guest.id }}" onclick="setTravel(this, 'Car')"
+                        id="car-{{ guest.id }}">
+                        <i class="fas fa-car"></i> Car
+                    </button>
+                    {% if guest.travel_mode %}
+                    <button class="mode-btn clear-btn" data-event-id="{{ event.id }}" data-guest-id="{{ guest.id }}"
+                        onclick="setTravel(this, '')">
+                        <i class="fas fa-times"></i>
+                    </button>
+                    {% endif %}
+                </div>
+
+                <!-- Ticket Status (only if Train) -->
+                <div class="ticket-section {% if guest.travel_mode != 'Train' %}hidden{% endif %}"
+                    id="ticket-section-{{ guest.id }}">
+                    <div class="toggle-row">
+                        <span class="toggle-label">
+                            <i class="fas fa-ticket-alt"></i> Ticket
+                            <span
+                                class="ticket-status-badge {% if guest.ticket_status == 'done' %}done{% elif guest.ticket_status == 'pending' %}pending{% endif %}"
+                                id="ticket-badge-{{ guest.id }}">
+                                {{ guest.ticket_status|title if guest.ticket_status else '—' }}
+                            </span>
+                        </span>
+                        <div class="ticket-toggle-group">
+                            <button class="mode-btn {% if guest.ticket_status == 'done' %}ticket-done{% endif %}"
+                                data-event-id="{{ event.id }}" data-guest-id="{{ guest.id }}"
+                                onclick="setTicket(this, 'done')">
+                                <i class="fas fa-check"></i> Done
+                            </button>
+                            <button class="mode-btn {% if guest.ticket_status == 'pending' %}ticket-pending{% endif %}"
+                                data-event-id="{{ event.id }}" data-guest-id="{{ guest.id }}"
+                                onclick="setTicket(this, 'pending')">
+                                <i class="fas fa-clock"></i> Pending
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+
+        {% if not guests %}
+        <div class="empty-state">
+            <div class="empty-icon"><i class="fas fa-route"></i></div>
+            <h3>No guests yet</h3>
+            <p>Add guests to manage their travel details</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+    async function setTravel(btn, mode) {
+        const eventId = btn.dataset.eventId;
+        const guestId = btn.dataset.guestId;
+        const res = await fetch(`/event/${eventId}/guests/${guestId}/update`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ travel_mode: mode, ticket_status: mode !== 'Train' ? '' : undefined })
+        });
+        if (res.ok) {
+            showToast('Travel mode updated!', 'success');
+            // Show/hide ticket section
+            const ts = document.getElementById(`ticket-section-${guestId}`);
+            if (ts) ts.classList.toggle('hidden', mode !== 'Train');
+            // Update buttons
+            const trainBtn = document.getElementById(`train-${guestId}`);
+            const carBtn = document.getElementById(`car-${guestId}`);
+            if (trainBtn) trainBtn.classList.toggle('active', mode === 'Train');
+            if (trainBtn) trainBtn.classList.toggle('train-active', mode === 'Train');
+            if (carBtn) carBtn.classList.toggle('active', mode === 'Car');
+            if (carBtn) carBtn.classList.toggle('car-active', mode === 'Car');
+            // Reload to show cascade for family members
+            setTimeout(() => location.reload(), 500);
+        }
+    }
+
+    async function setTicket(btn, status) {
+        const eventId = btn.dataset.eventId;
+        const guestId = btn.dataset.guestId;
+        const res = await fetch(`/event/${eventId}/guests/${guestId}/update`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ticket_status: status })
+        });
+        if (res.ok) {
+            showToast('Ticket status updated!', 'success');
+            const badge = document.getElementById(`ticket-badge-${guestId}`);
+            if (badge) {
+                badge.textContent = status.charAt(0).toUpperCase() + status.slice(1);
+                badge.className = `ticket-status-badge ${status}`;
+            }
+            // Update buttons styling
+            const card = document.getElementById(`tc-${guestId}`);
+            if (card) {
+                card.querySelectorAll('.ticket-toggle-group .mode-btn').forEach(b => {
+                    b.classList.remove('ticket-done', 'ticket-pending');
+                });
+                const activeBtn = card.querySelector(`.ticket-toggle-group .mode-btn:${status === 'done' ? 'first-child' : 'last-child'}`);
+                if (activeBtn) activeBtn.classList.add(status === 'done' ? 'ticket-done' : 'ticket-pending');
+            }
+            // Reload to show cascade for family members
+            setTimeout(() => location.reload(), 500);
+        }
+    }
+</script>
+{% endblock %}

@@ -1,0 +1,515 @@
+{% extends 'base.html' %}
+{% block title %}{{ event.name }}{% endblock %}
+
+{% block head %}
+<style>
+    .event-nav-item { position: relative; }
+    .nav-badge {
+        position: absolute;
+        top: 2px;
+        right: 2px;
+        background: var(--danger);
+        color: white;
+        font-size: 0.65rem;
+        padding: 2px 5px;
+        border-radius: 10px;
+        line-height: 1;
+        font-weight: 700;
+        border: 2px solid white;
+    }
+    .member-actions {
+        margin-left: auto;
+        padding-left: 1rem;
+    }
+    .modal-body textarea {
+        min-height: 120px;
+        resize: vertical;
+    }
+    .code-actions {
+        display: flex;
+        gap: 8px;
+        margin-left: 8px;
+    }
+    .share-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 12px;
+        background: rgba(6, 182, 212, 0.1);
+        color: var(--secondary);
+        border: 1px solid rgba(6, 182, 212, 0.3);
+        border-radius: 6px;
+        font-size: 0.8rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: var(--transition);
+    }
+    .share-btn:hover {
+        background: var(--secondary);
+        color: white;
+    }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<!-- Message Modal -->
+<div class="modal-overlay hidden" id="messageModal">
+    <div class="modal">
+        <div class="modal-header">
+            <h3><i class="fas fa-paper-plane"></i> Send Message to <span id="msgRecipientName"></span></h3>
+            <button class="modal-close" onclick="closeMessageModal()"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="modal-body">
+            <input type="hidden" id="msgRecipientId">
+            <div class="form-group">
+                <label class="form-label">Message Content</label>
+                <textarea class="form-input" id="msgContent" placeholder="Type your notification message here..."></textarea>
+            </div>
+            <p class="form-help text-sm" style="color:var(--text-light); margin-top:8px;">
+                <i class="fas fa-envelope"></i> This will also be sent to their registered email.
+            </p>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-ghost" onclick="closeMessageModal()">Cancel</button>
+            <button class="btn btn-primary" id="sendMsgBtn" onclick="submitMessage()">
+                <i class="fas fa-paper-plane"></i> Send
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+    function openMessageModal(id, name) {
+        document.getElementById('msgRecipientId').value = id;
+        document.getElementById('msgRecipientName').textContent = name;
+        document.getElementById('msgContent').value = '';
+        document.getElementById('messageModal').classList.remove('hidden');
+        setTimeout(() => document.getElementById('msgContent').focus(), 50);
+    }
+
+    function closeMessageModal() {
+        document.getElementById('messageModal').classList.add('hidden');
+    }
+
+    async function submitMessage() {
+        const rid = document.getElementById('msgRecipientId').value;
+        const msg = document.getElementById('msgContent').value.trim();
+        if(!msg) return showToast('Please enter a message', 'error');
+
+        const btn = document.getElementById('sendMsgBtn');
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending...';
+
+        try {
+            const res = await fetch(`/event/{{ event.id }}/notifications/send`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message: msg, receiver_id: rid })
+            });
+            const data = await res.json();
+            if(data.success) {
+                showToast('Message sent successfully!', 'success');
+                closeMessageModal();
+            } else {
+                showToast(data.error || 'Failed to send message', 'error');
+            }
+        } catch(e) {
+            showToast('An error occurred', 'error');
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-paper-plane"></i> Send';
+        }
+    }
+
+    // Check for unread notifications
+    async function checkUnread() {
+        try {
+            const res = await fetch(`/event/{{ event.id }}/notifications/unread-count`);
+            const data = await res.json();
+            const badge = document.getElementById('unreadBadge');
+            if(data.count > 0) {
+                badge.textContent = data.count;
+                badge.classList.remove('hidden');
+            } else {
+                badge.classList.add('hidden');
+            }
+        } catch(e) {}
+    }
+
+    // Share Code Modal Logic
+    function openShareModal() {
+        document.getElementById('shareRecipientEmail').value = '';
+        document.getElementById('shareModal').classList.remove('hidden');
+        setTimeout(() => document.getElementById('shareRecipientEmail').focus(), 50);
+    }
+
+    function closeShareModal() {
+        document.getElementById('shareModal').classList.add('hidden');
+    }
+
+    async function submitShareCode() {
+        const email = document.getElementById('shareRecipientEmail').value.trim();
+        if(!email) return showToast('Please enter an email address', 'error');
+        if(!email.includes('@')) return showToast('Please enter a valid email address', 'error');
+
+        const btn = document.getElementById('sendShareBtn');
+        const originalHtml = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending...';
+
+        try {
+            const res = await fetch(`/event/{{ event.id }}/share-code`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: email })
+            });
+            const data = await res.json();
+            if(data.success) {
+                showToast('Invitation sent successfully!', 'success');
+                closeShareModal();
+            } else {
+                showToast(data.error || 'Failed to send invitation', 'error');
+            }
+        } catch(e) {
+            showToast('An error occurred', 'error');
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = originalHtml;
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        checkUnread();
+        setInterval(checkUnread, 30000); // Check every 30s
+    });
+</script>
+
+<!-- Share Code Modal -->
+<div class="modal-overlay hidden" id="shareModal">
+    <div class="modal">
+        <div class="modal-header">
+            <h3><i class="fas fa-paper-plane"></i> Share Event Code</h3>
+            <button class="modal-close" onclick="closeShareModal()"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="modal-body">
+            <p style="color:var(--text-secondary); font-size: 0.9rem; margin-bottom: 20px;">
+                Enter an email address to send the joining code for <strong>{{ event.name }}</strong>.
+            </p>
+            <div class="form-group">
+                <label class="form-label">Recipient Email</label>
+                <input type="email" class="form-input" id="shareRecipientEmail" placeholder="e.g. friend@example.com">
+            </div>
+            <div class="setup-note" style="margin-top: 20px;">
+                <i class="fas fa-info-circle"></i>
+                <span>They will receive a premium email with the event name and joining code <strong>{{ event.unique_code }}</strong>.</span>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-ghost" onclick="closeShareModal()">Cancel</button>
+            <button class="btn btn-primary" id="sendShareBtn" onclick="submitShareCode()">
+                <i class="fas fa-paper-plane"></i> Send Invite
+            </button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb"><a href="{{ url_for('dashboard') }}">Dashboard</a> / {{ event.name }}</div>
+        <h1 class="page-title">{{ event.name }}</h1>
+        <div class="event-code-hero">
+            <i class="fas fa-hashtag"></i>
+            <span>Event Code: </span>
+            <strong class="event-code-big">{{ event.unique_code }}</strong>
+            <div class="code-actions">
+                <button class="copy-btn" onclick="copyCode('{{ event.unique_code }}')">
+                    <i class="fas fa-copy"></i> Copy
+                </button>
+                <button class="share-btn" onclick="openShareModal()">
+                    <i class="fas fa-paper-plane"></i> Share via Email
+                </button>
+            </div>
+        </div>
+    </div>
+    <div class="header-actions">
+        <div class="role-badge role-badge-{{ member.role }}">
+            <i
+                class="fas fa-{% if member.role == 'admin' %}crown{% elif member.role == 'manager' %}user-tie{% else %}user{% endif %}"></i>
+            {{ member.role|title }}
+        </div>
+    </div>
+</div>
+
+<!-- Quick Nav -->
+<div class="event-nav">
+    <a href="{{ url_for('event_dashboard', event_id=event.id) }}" class="event-nav-item active">
+        <i class="fas fa-tachometer-alt"></i> Dashboard
+    </a>
+    <a href="{{ url_for('guests', event_id=event.id) }}" class="event-nav-item">
+        <i class="fas fa-users"></i> Guests
+    </a>
+    <a href="{{ url_for('stay', event_id=event.id) }}" class="event-nav-item">
+        <i class="fas fa-bed"></i> Stay
+    </a>
+    {% if is_admin %}
+    <a href="{{ url_for('travel', event_id=event.id) }}" class="event-nav-item">
+        <i class="fas fa-train"></i> Travel
+    </a>
+    {% endif %}
+    <a href="{{ url_for('notifications', event_id=event.id) }}" class="event-nav-item">
+        <i class="fas fa-bell"></i> Notifications
+        <span class="nav-badge hidden" id="unreadBadge">0</span>
+    </a>
+</div>
+
+<!-- Tabs -->
+<div class="tabs-wrapper">
+    <div class="tabs-header">
+        <button class="tab-btn active" onclick="switchTab('members', this)" id="tabBtnMembers">
+            <i class="fas fa-users"></i> Members
+            <span class="tab-badge" id="memberCountBadge">
+                {{ members | selectattr('status', 'equalto', 'approved') | list | length }}
+            </span>
+        </button>
+        {% if is_admin %}
+        <button class="tab-btn" onclick="switchTab('pending', this)" id="tabBtnPending">
+            <i class="fas fa-clock"></i> Approval Pending
+            <span class="tab-badge {% if pending_approvals %}tab-badge-warn{% endif %}" id="pendingCountBadge">
+                {{ pending_approvals | length }}
+            </span>
+        </button>
+        {% endif %}
+        {% if is_admin %}
+        <div style="margin-left:auto; display:flex; gap:10px; align-items:center;">
+            <button class="btn btn-primary btn-sm" onclick="openMessageModal('all', 'Everyone')">
+                <i class="fas fa-bullhorn"></i> Message All
+            </button>
+        </div>
+        {% elif member.role in ('manager', 'member') %}
+        <div style="margin-left:auto; display:flex; gap:10px; align-items:center;">
+            <button class="btn btn-ghost btn-sm" onclick="openMessageModal('admins', 'All Admins')">
+                <i class="fas fa-envelope"></i> Message Admins
+            </button>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Members Tab -->
+    <div class="tab-panel" id="tab-members">
+        <div class="members-grid" id="membersGrid">
+            {% for m in members %}
+            {% if m.status == 'approved' %}
+            <div class="member-card" id="member-{{ m.id }}">
+                <div class="member-avatar">{{ m.user.name[0].upper() }}</div>
+                <div class="member-info">
+                    <strong>{{ m.user.name }}</strong>
+                    <span class="member-email">{{ m.user.email }}</span>
+                </div>
+                <div class="member-role">
+                    {% if is_admin and m.user_id != current_user.id %}
+                    <select class="role-select" data-event-id="{{ event.id }}" data-member-id="{{ m.id }}"
+                        onchange="setRole(this)">
+                        <option value="member" {% if m.role=='member' %}selected{% endif %}>Member</option>
+                        <option value="manager" {% if m.role=='manager' %}selected{% endif %}>Manager</option>
+                        <option value="admin" {% if m.role=='admin' %}selected{% endif %}>Admin</option>
+                    </select>
+                    {% else %}
+                    <span class="role-tag role-{{ m.role }}">{{ m.role|title }}</span>
+                    {% endif %}
+                </div>
+                <div class="member-actions">
+                    {% if m.user_id != current_user.id %}
+                        {% if is_admin or (m.role == 'admin') %}
+                        <button class="icon-btn" onclick="openMessageModal('{{ m.user_id }}', '{{ m.user.name }}')" title="Message {{ m.user.name }}">
+                            <i class="fas fa-comment-dots"></i>
+                        </button>
+                        {% endif %}
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+            {% endfor %}
+
+            {% if not members | selectattr('status', 'equalto', 'approved') | list %}
+            <div class="empty-state small">
+                <div class="empty-icon"><i class="fas fa-users"></i></div>
+                <p>No approved members yet</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Pending Tab -->
+    {% if is_admin %}
+    <div class="tab-panel hidden" id="tab-pending">
+        {% if pending_approvals %}
+        <div class="pending-approvals-list" id="pendingList">
+            {% for m in pending_approvals %}
+            <div class="approval-card" id="approval-{{ m.id }}">
+                <div class="member-avatar">{{ m.user.name[0].upper() }}</div>
+                <div class="member-info">
+                    <strong>{{ m.user.name }}</strong>
+                    <span class="member-email">{{ m.user.email }}</span>
+                    <span class="joined-at">Requested {{ m.joined_at.strftime('%b %d, %Y') }}</span>
+                </div>
+                <div class="approval-actions">
+                    <button class="btn btn-success btn-sm" data-event-id="{{ event.id }}" data-member-id="{{ m.id }}"
+                        data-user-name="{{ m.user.name }}" data-user-email="{{ m.user.email }}"
+                        onclick="approveMember(this)">
+                        <i class="fas fa-check"></i> Approve
+                    </button>
+                    <button class="btn btn-danger btn-sm" data-event-id="{{ event.id }}" data-member-id="{{ m.id }}"
+                        onclick="rejectMember(this)">
+                        <i class="fas fa-times"></i> Reject
+                    </button>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty-state small" id="pendingEmpty">
+            <div class="empty-icon"><i class="fas fa-check-double"></i></div>
+            <p>No pending approvals</p>
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+
+<script>
+    function copyCode(code) {
+        navigator.clipboard.writeText(code).then(() => showToast('Code copied!', 'success'));
+    }
+
+    function switchTab(tab, btn) {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.tab-panel').forEach(p => p.classList.add('hidden'));
+        btn.classList.add('active');
+        document.getElementById('tab-' + tab).classList.remove('hidden');
+    }
+
+    // Approved member count tracker
+    let approvedCount = parseInt(document.getElementById('memberCountBadge')?.textContent || '0');
+    let pendingCount = parseInt(document.getElementById('pendingCountBadge')?.textContent || '0');
+
+    function updateBadges() {
+        const mb = document.getElementById('memberCountBadge');
+        const pb = document.getElementById('pendingCountBadge');
+        if (mb) mb.textContent = approvedCount;
+        if (pb) {
+            pb.textContent = pendingCount;
+            pb.classList.toggle('tab-badge-warn', pendingCount > 0);
+        }
+    }
+
+    async function approveMember(btn) {
+        const eventId = btn.dataset.eventId;
+        const memberId = btn.dataset.memberId;
+        const userName = btn.dataset.userName;
+        const userEmail = btn.dataset.userEmail;
+        const res = await fetch(`/event/${eventId}/approve/${memberId}`, { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+            const card = document.getElementById('approval-' + memberId);
+            if (card) {
+                card.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
+                card.style.opacity = '0';
+                card.style.transform = 'translateX(10px)';
+                setTimeout(() => {
+                    card.remove();
+                    const pendingList = document.getElementById('pendingList');
+                    if (pendingList && pendingList.children.length === 0) {
+                        pendingList.innerHTML = '<div class="empty-state small"><div class="empty-icon"><i class="fas fa-check-double"></i></div><p>No pending approvals</p></div>';
+                    }
+                }, 300);
+            }
+            addMemberToGrid(memberId, userName, userEmail);
+            approvedCount++;
+            pendingCount = Math.max(0, pendingCount - 1);
+            updateBadges();
+            showToast(`${userName} approved!`, 'success');
+        }
+    }
+
+    function addMemberToGrid(memberId, userName, userEmail) {
+        const grid = document.getElementById('membersGrid');
+        if (!grid) return;
+        // Remove empty state if present
+        const emptyState = grid.querySelector('.empty-state');
+        if (emptyState) emptyState.remove();
+        const initial = userName.charAt(0).toUpperCase();
+        const card = document.createElement('div');
+        card.className = 'member-card';
+        card.id = 'member-' + memberId;
+        card.style.animation = 'fadeInUp 0.3s ease';
+        card.innerHTML = `
+            <div class="member-avatar">${initial}</div>
+            <div class="member-info">
+                <strong>${userName}</strong>
+                <span class="member-email">${userEmail}</span>
+            </div>
+            <div class="member-role">
+                <span class="role-tag role-member">Member</span>
+            </div>`;
+        grid.appendChild(card);
+    }
+
+    async function rejectMember(btn) {
+        const eventId = btn.dataset.eventId;
+        const memberId = btn.dataset.memberId;
+        const res = await fetch(`/event/${eventId}/reject/${memberId}`, { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+            const card = document.getElementById('approval-' + memberId);
+            if (card) {
+                card.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
+                card.style.opacity = '0';
+                card.style.transform = 'translateX(10px)';
+                setTimeout(() => {
+                    card.remove();
+                    const pendingList = document.getElementById('pendingList');
+                    if (pendingList && pendingList.children.length === 0) {
+                        pendingList.innerHTML = '<div class="empty-state small"><div class="empty-icon"><i class="fas fa-check-double"></i></div><p>No pending approvals</p></div>';
+                    }
+                }, 300);
+            }
+            pendingCount = Math.max(0, pendingCount - 1);
+            updateBadges();
+            showToast('Member rejected.', 'info');
+        }
+    }
+
+    async function setRole(select) {
+        const eventId = select.dataset.eventId;
+        const memberId = select.dataset.memberId;
+        const role = select.value;
+        const res = await fetch(`/event/${eventId}/set-role/${memberId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ role })
+        });
+        const data = await res.json();
+        if (data.success) {
+            showToast(`Role updated to ${role}!`, 'success');
+        } else {
+            showToast('Failed to update role.', 'error');
+        }
+    }
+</script>
+
+<style>
+    @keyframes fadeInUp {
+        from {
+            opacity: 0;
+            transform: translateY(10px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+</style>
+{% endblock %}

@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body { 
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
+            background-color: #0f0f1a; 
+            margin: 0; 
+            padding: 40px 20px; 
+            color: #f0f0ff;
+        }
+        .container { 
+            max-width: 540px; 
+            margin: 0 auto; 
+            background-color: #17172a; 
+            border-radius: 20px; 
+            overflow: hidden; 
+            box-shadow: 0 10px 40px rgba(0,0,0,0.4); 
+            border: 1px solid #2d2d52;
+        }
+        .header { 
+            background: linear-gradient(135deg, #6c63ff, #4f46e5); 
+            padding: 40px 30px; 
+            text-align: center; 
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 24px;
+            font-weight: 800;
+            letter-spacing: -0.5px;
+            color: #ffffff;
+        }
+        .content { 
+            padding: 40px; 
+        }
+        .applicant-info {
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 12px;
+            padding: 25px;
+            margin-bottom: 30px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        .info-row {
+            margin-bottom: 15px;
+        }
+        .info-label {
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #6c63ff;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+        .info-value {
+            font-size: 18px;
+            color: #ffffff;
+            font-weight: 600;
+        }
+        .message {
+            font-size: 16px;
+            color: #9898c8;
+            line-height: 1.6;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+        .button-container {
+            text-align: center;
+        }
+        .button { 
+            display: inline-block; 
+            padding: 16px 32px; 
+            background-color: #6c63ff; 
+            color: #ffffff; 
+            text-decoration: none; 
+            border-radius: 10px; 
+            font-weight: 700; 
+            font-size: 16px;
+        }
+        .footer { 
+            text-align: center; 
+            padding: 30px; 
+            font-size: 12px; 
+            color: #5a5a8a; 
+            background-color: rgba(15, 15, 26, 0.5);
+            border-top: 1px solid #2d2d52;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>New Join Request</h1>
+        </div>
+        <div class="content">
+            <p class="message">
+                Someone wants to join your event: <strong>{{ event_name }}</strong>
+            </p>
+            
+            <div class="applicant-info">
+                <div class="info-row">
+                    <div class="info-label">Applicant Name</div>
+                    <div class="info-value">{{ applicant_name }}</div>
+                </div>
+                <div class="info-row">
+                    <div class="info-label">Email Address</div>
+                    <div class="info-value">{{ applicant_email }}</div>
+                </div>
+            </div>
+            
+            <p class="message">
+                Please review the request and approve or decline them from the member management tab on your dashboard.
+            </p>
+            
+            <div class="button-container">
+                <a href="{{ dashboard_url }}" class="button">Review Request</a>
+            </div>
+        </div>
+        <div class="footer">
+            <p>Sent via EventFlow — Seamless Event Management</p>
+            <p>&copy; 2024 EventFlow Team</p>
+        </div>
+    </div>
+</body>
+</html>

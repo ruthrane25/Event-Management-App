@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body { 
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
+            background-color: #0f0f1a; 
+            margin: 0; 
+            padding: 40px 20px; 
+            color: #f0f0ff;
+        }
+        .container { 
+            max-width: 540px; 
+            margin: 0 auto; 
+            background-color: #17172a; 
+            border-radius: 20px; 
+            overflow: hidden; 
+            box-shadow: 0 10px 40px rgba(0,0,0,0.4); 
+            border: 1px solid #2d2d52;
+        }
+        .header { 
+            background: linear-gradient(135deg, #6c63ff, #06b6d4); 
+            padding: 40px 30px; 
+            text-align: center; 
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 24px;
+            font-weight: 800;
+            letter-spacing: -0.5px;
+            color: #ffffff;
+        }
+        .content { 
+            padding: 40px; 
+            text-align: center;
+        }
+        .inviter {
+            font-size: 16px;
+            color: #9898c8;
+            margin-bottom: 8px;
+        }
+        .event-name {
+            font-size: 28px;
+            font-weight: 800;
+            color: #ffffff;
+            margin-bottom: 30px;
+            line-height: 1.2;
+        }
+        .code-label {
+            font-size: 13px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: #6c63ff;
+            margin-bottom: 12px;
+        }
+        .code-box { 
+            background-color: rgba(108, 99, 255, 0.1); 
+            border: 2px dashed #6c63ff; 
+            padding: 15px 10px; 
+            margin: 0 10px 30px;
+            border-radius: 12px;
+            text-align: center;
+        }
+        .joining-code {
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 24px;
+            font-weight: 800;
+            letter-spacing: 4px;
+            color: #ffffff;
+            white-space: nowrap;
+            display: inline-block;
+        }
+        .instructions {
+            font-size: 15px;
+            color: #9898c8;
+            line-height: 1.6;
+            margin-bottom: 30px;
+        }
+        .button { 
+            display: inline-block; 
+            padding: 16px 32px; 
+            background-color: #6c63ff; 
+            color: #ffffff; 
+            text-decoration: none; 
+            border-radius: 10px; 
+            font-weight: 700; 
+            font-size: 16px;
+            transition: all 0.2s ease;
+        }
+        .footer { 
+            text-align: center; 
+            padding: 30px; 
+            font-size: 12px; 
+            color: #5a5a8a; 
+            background-color: rgba(15, 15, 26, 0.5);
+            border-top: 1px solid #2d2d52;
+        }
+        .footer p { margin: 5px 0; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>You're Invited!</h1>
+        </div>
+        <div class="content">
+            <p class="inviter"><strong>{{ sender_name }}</strong> has invited you to join:</p>
+            <h2 class="event-name">{{ event_name }}</h2>
+            
+            <div class="code-label">Use this Joining Code</div>
+            <div class="code-box">
+                <span class="joining-code">{{ joining_code }}</span>
+            </div>
+            
+            <p class="instructions">
+                Simply download the EventFlow app or visit our website, 
+                click on <strong>Join Event</strong>, and enter the code above.
+            </p>
+            
+            <a href="{{ dashboard_url }}" class="button">Open EventFlow</a>
+        </div>
+        <div class="footer">
+            <p>Sent via EventFlow — Seamless Event Management</p>
+            <p>&copy; 2024 EventFlow Team</p>
+        </div>
+    </div>
+</body>
+</html>

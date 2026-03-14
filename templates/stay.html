@@ -1,0 +1,353 @@
+{% extends 'base.html' %}
+{% block title %}Stay — {{ event.name }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb"><a href="{{ url_for('dashboard') }}">Dashboard</a> / <a
+                href="{{ url_for('event_dashboard', event_id=event.id) }}">{{ event.name }}</a> / Stay</div>
+        <h1 class="page-title"><i class="fas fa-bed"></i> Stay Management</h1>
+    </div>
+    {% if is_admin_or_manager %}
+    <button class="btn btn-primary" onclick="openAddPlaceModal()" id="addPlaceBtn">
+        <i class="fas fa-plus"></i> Add Hotel / Villa
+    </button>
+    {% endif %}
+</div>
+
+<!-- Event Nav -->
+<div class="event-nav">
+    <a href="{{ url_for('event_dashboard', event_id=event.id) }}" class="event-nav-item">
+        <i class="fas fa-tachometer-alt"></i> Dashboard
+    </a>
+    <a href="{{ url_for('guests', event_id=event.id) }}" class="event-nav-item">
+        <i class="fas fa-users"></i> Guests
+    </a>
+    <a href="{{ url_for('stay', event_id=event.id) }}" class="event-nav-item active">
+        <i class="fas fa-bed"></i> Stay
+    </a>
+    {% if is_admin %}
+    <a href="{{ url_for('travel', event_id=event.id) }}" class="event-nav-item">
+        <i class="fas fa-train"></i> Travel
+    </a>
+    {% endif %}
+    <a href="{{ url_for('notifications', event_id=event.id) }}" class="event-nav-item">
+        <i class="fas fa-bell"></i> Notifications
+    </a>
+</div>
+
+<!-- Stay Dashboard -->
+<div class="stay-dashboard" id="stayDashboard">
+    <div class="loading-spinner" id="stayLoading">
+        <i class="fas fa-spinner fa-spin"></i> Loading accommodations...
+    </div>
+    <div id="stayContent"></div>
+</div>
+
+<!-- Add Place Modal -->
+<div class="modal-overlay hidden" id="addPlaceModal">
+    <div class="modal">
+        <div class="modal-header">
+            <h3><i class="fas fa-hotel"></i> Add Accommodation</h3>
+            <button class="modal-close" onclick="closeModal('addPlaceModal')"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+                <label class="form-label">Type</label>
+                <div class="type-selector" id="placeTypeSelector">
+                    <button class="type-btn active" onclick="selectType('Hotel', this)" id="typeHotel">
+                        <i class="fas fa-hotel"></i> Hotel
+                    </button>
+                    <button class="type-btn" onclick="selectType('Villa', this)" id="typeVilla">
+                        <i class="fas fa-home"></i> Villa
+                    </button>
+                </div>
+                <input type="hidden" id="selectedPlaceType" value="Hotel" />
+            </div>
+            <div class="form-group">
+                <label class="form-label">Name</label>
+                <input type="text" class="form-input" id="placeName" placeholder="e.g. The Grand Palace Hotel" />
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-ghost" onclick="closeModal('addPlaceModal')">Cancel</button>
+            <button class="btn btn-primary" onclick="submitPlace()">
+                <i class="fas fa-plus"></i> Add
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Add Room Modal -->
+<div class="modal-overlay hidden" id="addRoomModal">
+    <div class="modal">
+        <div class="modal-header">
+            <h3><i class="fas fa-door-open"></i> Add Room</h3>
+            <button class="modal-close" onclick="closeModal('addRoomModal')"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+                <label class="form-label">Room Number / Name</label>
+                <input type="text" class="form-input" id="roomNumber" placeholder="e.g. 101 or Suite A" />
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-ghost" onclick="closeModal('addRoomModal')">Cancel</button>
+            <button class="btn btn-primary" onclick="submitRoom()">
+                <i class="fas fa-plus"></i> Add Room
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Assign Guest Modal -->
+<div class="modal-overlay hidden" id="assignGuestModal">
+    <div class="modal">
+        <div class="modal-header">
+            <h3><i class="fas fa-user-plus"></i> Assign Guest to Room</h3>
+            <button class="modal-close" onclick="closeModal('assignGuestModal')"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="modal-body">
+            <input type="text" class="form-input" id="guestSearchInput" placeholder="Search guest..."
+                oninput="filterGuestList()" />
+            <div class="guest-assign-list" id="guestAssignList"></div>
+        </div>
+    </div>
+</div>
+
+<div id="pageData" data-event-id="{{ event.id }}"
+    data-is-admin-or-manager="{{ 'true' if is_admin_or_manager else 'false' }}"
+    data-role="{{ member.role }}" data-user-id="{{ current_user.id }}" hidden></div>
+
+<script>
+    const _pd = document.getElementById('pageData');
+    const eventId = _pd.dataset.eventId;
+    const isAdminOrManager = _pd.dataset.isAdminOrManager === 'true';
+    const currentUserId = parseInt(_pd.dataset.userId);
+    const userRole = _pd.dataset.role;
+    let stayData = { accommodations: [], guests: [] };
+    let activeAccommodationId = null;
+    let activeRoomId = null;
+
+    async function loadStayData() {
+        document.getElementById('stayLoading').classList.remove('hidden');
+        const res = await fetch(`/event/${eventId}/stay/data`);
+        stayData = await res.json();
+        document.getElementById('stayLoading').classList.add('hidden');
+        renderStay();
+    }
+
+    function renderStay() {
+        const container = document.getElementById('stayContent');
+        if (!stayData.accommodations.length) {
+            container.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-icon"><i class="fas fa-hotel"></i></div>
+        <h3>No accommodations yet</h3>
+        <p>${isAdminOrManager ? 'Add a hotel or villa to get started' : 'No stay details configured yet'}</p>
+        ${isAdminOrManager ? '<button class="btn btn-primary" onclick="openAddPlaceModal()"><i class="fas fa-plus"></i> Add Hotel / Villa</button>' : ''}
+      </div>`;
+            return;
+        }
+
+        container.innerHTML = stayData.accommodations.map(acc => `
+    <div class="accommodation-card" id="acc-${acc.id}">
+      <div class="accommodation-header">
+        <div class="acc-title">
+          <div class="acc-icon ${acc.type === 'Villa' ? 'villa-icon' : 'hotel-icon'}">
+            <i class="fas fa-${acc.type === 'Villa' ? 'home' : 'hotel'}"></i>
+          </div>
+          <div>
+            <h3>${acc.name}</h3>
+            <span class="acc-type-badge">${acc.type}</span>
+            <span class="room-count">${acc.rooms.length} room${acc.rooms.length !== 1 ? 's' : ''}</span>
+          </div>
+        </div>
+        <div class="acc-actions">
+          ${isAdminOrManager ? `
+          <button class="btn btn-ghost btn-sm" onclick="openAddRoomModal(${acc.id})">
+            <i class="fas fa-plus"></i> Add Room
+          </button>
+          <button class="btn btn-danger btn-sm" onclick="deletePlace(${acc.id})">
+            <i class="fas fa-trash"></i>
+          </button>` : ''}
+        </div>
+      </div>
+
+      <div class="rooms-grid">
+        ${acc.rooms.length ? acc.rooms.map(room => `
+          <div class="room-card" id="room-${room.id}">
+            <div class="room-header">
+              <div class="room-icon"><i class="fas fa-door-open"></i></div>
+              <div class="room-info">
+                <strong>Room ${room.number}</strong>
+                <span>${room.guests.length} guest${room.guests.length !== 1 ? 's' : ''}</span>
+              </div>
+              <div class="room-actions">
+                <button class="icon-btn green" onclick="openAssignGuestModal(${room.id})" title="Add guest">
+                  <i class="fas fa-user-plus"></i>
+                </button>
+                ${isAdminOrManager ? `
+                <button class="icon-btn red" onclick="deleteRoom(${room.id})" title="Delete room">
+                  <i class="fas fa-trash"></i>
+                </button>` : ''}
+              </div>
+            </div>
+            <div class="room-guests-list">
+              ${room.guests.length ? room.guests.map(g => `
+                <div class="room-guest-chip">
+                  <i class="fas fa-${g.is_family ? 'home' : 'user'}"></i>
+                  ${g.name}
+                  ${(isAdminOrManager || g.added_by === currentUserId) ? `
+                    <button class="chip-remove" onclick="removeGuestFromRoom(${room.id}, ${g.id})">&times;</button>
+                  ` : ''}
+                </div>
+              `).join('') : `<div class="room-empty">No guests assigned</div>`}
+            </div>
+          </div>
+        `).join('') : `
+          <div class="rooms-empty">
+            ${isAdminOrManager ? `<button class="btn btn-ghost btn-sm" onclick="openAddRoomModal(${acc.id})"><i class="fas fa-plus"></i> Add first room</button>` : 'No rooms added yet'}
+          </div>`}
+      </div>
+    </div>
+  `).join('');
+    }
+
+    function openAddPlaceModal() {
+        document.getElementById('placeName').value = '';
+        selectType('Hotel', document.getElementById('typeHotel'));
+        document.getElementById('addPlaceModal').classList.remove('hidden');
+        document.getElementById('placeName').focus();
+    }
+
+    function openAddRoomModal(accommodationId) {
+        activeAccommodationId = accommodationId;
+        document.getElementById('roomNumber').value = '';
+        document.getElementById('addRoomModal').classList.remove('hidden');
+        document.getElementById('roomNumber').focus();
+    }
+
+    function openAssignGuestModal(roomId) {
+        activeRoomId = roomId;
+        document.getElementById('guestSearchInput').value = '';
+        renderGuestAssignList('');
+        document.getElementById('assignGuestModal').classList.remove('hidden');
+    }
+
+    function renderGuestAssignList(query) {
+        const room = stayData.accommodations.flatMap(a => a.rooms).find(r => r.id === activeRoomId);
+        const assignedIds = room ? room.guests.map(g => g.id) : [];
+        const filtered = stayData.guests.filter(g =>
+            g.name.toLowerCase().includes(query.toLowerCase()) && !assignedIds.includes(g.id)
+        );
+        const container = document.getElementById('guestAssignList');
+        container.innerHTML = filtered.length ? filtered.map(g => `
+    <div class="assign-guest-item" onclick="assignGuest(${g.id})">
+      <div class="guest-avatar ${g.is_family ? 'family-avatar' : ''}">
+        <i class="fas fa-${g.is_family ? 'home' : 'user'}"></i>
+      </div>
+      <div class="guest-assign-info">
+        <span class="guest-assign-name">${g.name}</span>
+        ${g.parent_name ? `<span class="guest-parent-info">(${g.parent_name}'s Family)</span>` : ''}
+      </div>
+    </div>
+  `).join('') : '<div class="empty-state small"><p>No unassigned guests found</p></div>';
+    }
+
+    function filterGuestList() {
+        renderGuestAssignList(document.getElementById('guestSearchInput').value);
+    }
+
+    function selectType(type, btn) {
+        document.querySelectorAll('.type-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById('selectedPlaceType').value = type;
+    }
+
+    function closeModal(id) {
+        document.getElementById(id).classList.add('hidden');
+    }
+
+    async function submitPlace() {
+        const name = document.getElementById('placeName').value.trim();
+        const type = document.getElementById('selectedPlaceType').value;
+        if (!name) { showToast('Please enter a name', 'error'); return; }
+        const res = await fetch(`/event/${eventId}/stay/add-place`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ place_name: name, place_type: type })
+        });
+        const data = await res.json();
+        if (data.success) {
+            closeModal('addPlaceModal');
+            showToast(`${type} added!`, 'success');
+            await loadStayData();
+        }
+    }
+
+    async function submitRoom() {
+        const number = document.getElementById('roomNumber').value.trim();
+        if (!number) { showToast('Please enter a room number', 'error'); return; }
+        const res = await fetch(`/event/${eventId}/stay/add-room`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ accommodation_id: activeAccommodationId, room_number: number })
+        });
+        const data = await res.json();
+        if (data.success) {
+            closeModal('addRoomModal');
+            showToast('Room added!', 'success');
+            await loadStayData();
+        }
+    }
+
+    async function assignGuest(guestId) {
+        const res = await fetch(`/event/${eventId}/stay/assign-guest`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ room_id: activeRoomId, guest_id: guestId })
+        });
+        const data = await res.json();
+        if (data.success) {
+            showToast('Guest assigned!', 'success');
+            closeModal('assignGuestModal');
+            await loadStayData();
+        }
+    }
+
+    async function removeGuestFromRoom(roomId, guestId) {
+        const res = await fetch(`/event/${eventId}/stay/remove-guest`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ room_id: roomId, guest_id: guestId })
+        });
+        const data = await res.json();
+        if (data.success) {
+            showToast('Guest removed from room.', 'info');
+            await loadStayData();
+        }
+    }
+
+    async function deletePlace(placeId) {
+        if (!confirm('Delete this accommodation and all its rooms?')) return;
+        const res = await fetch(`/event/${eventId}/stay/delete-place/${placeId}`, { method: 'POST' });
+        if ((await res.json()).success) {
+            showToast('Accommodation deleted.', 'info');
+            await loadStayData();
+        }
+    }
+
+    async function deleteRoom(roomId) {
+        if (!confirm('Delete this room?')) return;
+        const res = await fetch(`/event/${eventId}/stay/delete-room/${roomId}`, { method: 'POST' });
+        if ((await res.json()).success) {
+            showToast('Room deleted.', 'info');
+            await loadStayData();
+        }
+    }
+
+    // Load on page open
+    loadStayData();
+</script>
+{% endblock %}
