@@ -26,8 +26,13 @@ login_manager = LoginManager(app)
 login_manager.login_view = 'login'
 
 # Initialize database tables
-with app.app_context():
-    db.create_all()
+try:
+    with app.app_context():
+        db.create_all()
+    print("Database tables initialized successfully.")
+except Exception as e:
+    print(f"Error initializing database: {e}")
+    # Don't exit; let the app try to start so we can see other errors or logs
 
 # Jinja2 custom filter
 @app.template_filter('from_json')
