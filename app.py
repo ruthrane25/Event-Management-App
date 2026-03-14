@@ -23,6 +23,7 @@ if db_url.startswith("postgres://"):
     db_url = db_url.replace("postgres://", "postgresql://", 1)
 app.config['SQLALCHEMY_DATABASE_URI'] = db_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['PREFERRED_URL_SCHEME'] = 'https' # Force HTTPS in generated links
 
 db = SQLAlchemy(app)
 bcrypt = Bcrypt(app)
@@ -200,6 +201,16 @@ def send_notification_email(recipient_email, subject, body_html):
     except Exception as e:
         print(f"[ERROR] Failed to send email: {e}")
         return False
+
+# Manual database initialization route
+@app.route('/init-db')
+def init_db():
+    try:
+        with app.app_context():
+            db.create_all()
+        return "<h1>Database Success!</h1><p>Tables have been created. <a href='/login'>Go to Login</a></p>"
+    except Exception as e:
+        return f"<h1>Database Error</h1><p>{str(e)}</p>"
 
 
 # ─────────────────────────────────────────────
