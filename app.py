@@ -9,10 +9,14 @@ import os
 import json
 import requests
 from dotenv import load_dotenv
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 load_dotenv()
 
 app = Flask(__name__)
+# Enable HTTPS proxy support for Vercel
+app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
+
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'eventapp-secret-key-2024')
 db_url = os.environ.get('DATABASE_URL', 'sqlite:///event_app.db')
 if db_url.startswith("postgres://"):
@@ -215,11 +219,15 @@ def login():
     if request.method == 'POST':
         email = request.form.get('email', '').strip().lower()
         password = request.form.get('password', '')
-        user = User.query.filter_by(email=email).first()
-        if user and user.password and bcrypt.check_password_hash(user.password, password):
-            login_user(user)
-            return redirect(url_for('dashboard'))
-        flash('Invalid email or password.', 'error')
+        try:
+            user = User.query.filter_by(email=email).first()
+            if user and user.password and bcrypt.check_password_hash(user.password, password):
+                login_user(user)
+                return redirect(url_for('dashboard'))
+            flash('Invalid email or password.', 'error')
+        except Exception as e:
+            flash(f'Login Error: {str(e)}', 'error')
+            print(f"Detailed Login Error: {e}")
     return render_template('auth.html', mode='login')
 
 @app.route('/register', methods=['GET', 'POST'])
@@ -237,32 +245,36 @@ def register():
         if password != confirm:
             flash('Passwords do not match.', 'error')
             return render_template('auth.html', mode='register')
-        if User.query.filter_by(email=email).first():
-            flash('Email already registered.', 'error')
-            return render_template('auth.html', mode='register')
-        
-        # Generate OTP
-        import random
-        otp = str(random.randint(100000, 999999))
-        hashed = bcrypt.generate_password_hash(password).decode('utf-8')
-        
-        # Clear existing OTPs for this email
-        OTPVerification.query.filter_by(email=email).delete()
-        
-        # Store pending registration
-        new_otp = OTPVerification(email=email, name=name, password=hashed, otp_code=otp)
-        db.session.add(new_otp)
-        db.session.commit()
-        
-        # Send OTP Email
-        sent = send_notification_email(email, "Verify your EventFlow Account", 
-                                       render_template('emails/otp_email.html', name=name, otp=otp))
-        if sent:
-            session['pending_email'] = email
-            flash('Verification code sent to your email!', 'success')
-            return redirect(url_for('verify_otp'))
-        else:
-            flash('Failed to send verification email. Please check your SMTP settings.', 'error')
+        try:
+            if User.query.filter_by(email=email).first():
+                flash('Email already registered.', 'error')
+                return render_template('auth.html', mode='register')
+            
+            # Generate OTP
+            import random
+            otp = str(random.randint(100000, 999999))
+            hashed = bcrypt.generate_password_hash(password).decode('utf-8')
+            
+            # Clear existing OTPs for this email
+            OTPVerification.query.filter_by(email=email).delete()
+            
+            # Store pending registration
+            new_otp = OTPVerification(email=email, name=name, password=hashed, otp_code=otp)
+            db.session.add(new_otp)
+            db.session.commit()
+            
+            # Send OTP Email
+            sent = send_notification_email(email, "Verify your EventFlow Account", 
+                                           render_template('emails/otp_email.html', name=name, otp=otp))
+            if sent:
+                session['pending_email'] = email
+                flash('Verification code sent to your email!', 'success')
+                return redirect(url_for('verify_otp'))
+            else:
+                flash('Failed to send verification email. Please check your SMTP settings.', 'error')
+        except Exception as e:
+            flash(f'Registration Error: {str(e)}', 'error')
+            print(f"Detailed Registration Error: {e}")
             
     return render_template('auth.html', mode='register')
 
@@ -274,26 +286,30 @@ def verify_otp():
     
     if request.method == 'POST':
         otp = request.form.get('otp', '').strip()
-        record = OTPVerification.query.filter_by(email=email, otp_code=otp).first()
-        
-        if record:
-            # Check for expiry (e.g., 10 minutes)
-            if datetime.utcnow() - record.created_at > timedelta(minutes=10):
-                flash('OTP has expired. Please resend.', 'error')
-                return render_template('verify_otp.html', email=email)
+        try:
+            record = OTPVerification.query.filter_by(email=email, otp_code=otp).first()
             
-            # Create actual user
-            user = User(name=record.name, email=record.email, password=record.password)
-            db.session.add(user)
-            db.session.delete(record)
-            db.session.commit()
-            
-            login_user(user)
-            session.pop('pending_email', None)
-            flash('Account verified and created!', 'success')
-            return redirect(url_for('setup_event'))
-        else:
-            flash('Invalid verification code.', 'error')
+            if record:
+                # Check for expiry (e.g., 10 minutes)
+                if datetime.utcnow() - record.created_at > timedelta(minutes=10):
+                    flash('OTP has expired. Please resend.', 'error')
+                    return render_template('verify_otp.html', email=email)
+                
+                # Create actual user
+                user = User(name=record.name, email=record.email, password=record.password)
+                db.session.add(user)
+                db.session.delete(record)
+                db.session.commit()
+                
+                login_user(user)
+                session.pop('pending_email', None)
+                flash('Account verified and created!', 'success')
+                return redirect(url_for('setup_event'))
+            else:
+                flash('Invalid verification code.', 'error')
+        except Exception as e:
+            flash(f'Verification Error: {str(e)}', 'error')
+            print(f"Detailed Verification Error: {e}")
             
     return render_template('verify_otp.html', email=email)
 
