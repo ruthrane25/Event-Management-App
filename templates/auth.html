@@ -45,6 +45,7 @@
 
             {% if mode == 'login' %}
             <form method="POST" action="{{ url_for('login') }}" class="auth-form" id="loginForm">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <div class="form-group">
                     <label class="form-label"><i class="fas fa-envelope"></i> Email Address</label>
                     <input type="email" name="email" class="form-input" placeholder="you@example.com" required
@@ -67,6 +68,7 @@
 
             {% else %}
             <form method="POST" action="{{ url_for('register') }}" class="auth-form" id="registerForm">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <div class="form-group">
                     <label class="form-label"><i class="fas fa-user"></i> Full Name</label>
                     <input type="text" name="name" class="form-input" placeholder="Your full name" required

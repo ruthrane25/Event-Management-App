@@ -11,6 +11,7 @@
         </div>
 
         <form method="POST" class="auth-form" id="otpForm">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
             <div class="form-group">
                 <label class="form-label"><i class="fas fa-key"></i> Verification Code</label>
                 <div class="otp-input-group">

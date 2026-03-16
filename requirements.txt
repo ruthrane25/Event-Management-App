@@ -27,3 +27,5 @@ click
 greenlet
 typing_extensions
 psycopg2-binary
+flask-talisman
+flask-wtf

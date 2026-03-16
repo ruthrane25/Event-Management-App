@@ -10,13 +10,20 @@ import json
 import requests
 from dotenv import load_dotenv
 from werkzeug.middleware.proxy_fix import ProxyFix
+from flask_talisman import Talisman
+from flask_wtf.csrf import CSRFProtect
 
 load_dotenv()
 
 app = Flask(__name__)
 # Enable HTTPS proxy support for Vercel
-# Increased x_for, x_port to handle more complex proxy chains if needed
 app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1, x_for=1, x_port=1)
+
+# Security: Enable headers and CSRF protection
+# We set content_security_policy=None initially to avoid breaking existing styles/scripts
+# But HSTS, X-Frame-Options, etc. will be enabled.
+Talisman(app, content_security_policy=None)
+CSRFProtect(app)
 
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'eventapp-secret-key-2024')
 db_url = os.environ.get('DATABASE_URL', 'sqlite:///event_app.db')
@@ -26,19 +33,21 @@ app.config['SQLALCHEMY_DATABASE_URI'] = db_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['PREFERRED_URL_SCHEME'] = 'https' # Force HTTPS in generated links
 
+# Optimize SQLAlchemy for Serverless/Vercel (Cold Starts)
+app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+    "pool_size": 1,
+    "max_overflow": 0,
+    "pool_recycle": 3600,
+    "pool_pre_ping": True,
+}
+
 db = SQLAlchemy(app)
 bcrypt = Bcrypt(app)
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
 
-# Initialize database tables
-try:
-    with app.app_context():
-        db.create_all()
-    print("Database tables initialized successfully.")
-except Exception as e:
-    print(f"Error initializing database: {e}")
-    # Don't exit; let the app try to start so we can see other errors or logs
+# Note: Database tables are initialized via /init-db route if needed.
+# Removed global db.create_all() to speed up Vercel cold starts.
 
 # Jinja2 custom filter
 @app.template_filter('from_json')

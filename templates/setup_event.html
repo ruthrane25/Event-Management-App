@@ -22,6 +22,7 @@
         <!-- Create Event Form -->
         <div class="setup-panel" id="panel-create">
             <form method="POST" action="{{ url_for('setup_event') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <input type="hidden" name="action" value="create" />
                 <div class="form-group">
                     <label class="form-label"><i class="fas fa-star"></i> Event Name</label>
@@ -41,6 +42,7 @@
         <!-- Join Event Form -->
         <div class="setup-panel hidden" id="panel-join">
             <form method="POST" action="{{ url_for('setup_event') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <input type="hidden" name="action" value="join" />
                 <div class="form-group">
                     <label class="form-label"><i class="fas fa-key"></i> Event Unique Code</label>
