@@ -15,7 +15,8 @@ load_dotenv()
 
 app = Flask(__name__)
 # Enable HTTPS proxy support for Vercel
-app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
+# Increased x_for, x_port to handle more complex proxy chains if needed
+app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1, x_for=1, x_port=1)
 
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'eventapp-secret-key-2024')
 db_url = os.environ.get('DATABASE_URL', 'sqlite:///event_app.db')
@@ -351,12 +352,20 @@ def resend_otp():
 
 @app.route('/google-login')
 def google_login():
-    # Simple Google OAuth flow – redirect to Google
+    # Attempt to get redirect URI from env variable for manual override
+    redirect_uri = os.environ.get('GOOGLE_REDIRECT_URI')
+    if not redirect_uri:
+        # Generate automatically, respecting proxy headers thanks to ProxyFix
+        redirect_uri = url_for('google_callback', _external=True)
+    
+    # Debug log for Vercel console to help identify mismatches
+    print(f"[DEBUG] Google Login Redirect URI: {redirect_uri}")
+    
     google_auth_url = (
         "https://accounts.google.com/o/oauth2/v2/auth"
         "?response_type=code"
         f"&client_id={GOOGLE_CLIENT_ID}"
-        "&redirect_uri=" + url_for('google_callback', _external=True) +
+        f"&redirect_uri={redirect_uri}"
         "&scope=openid%20email%20profile"
     )
     return redirect(google_auth_url)
@@ -367,12 +376,18 @@ def google_callback():
     if not code:
         flash('Google login failed.', 'error')
         return redirect(url_for('login'))
+        
+    # Must use the EXACT same redirect_uri as sent in /google-login
+    redirect_uri = os.environ.get('GOOGLE_REDIRECT_URI')
+    if not redirect_uri:
+        redirect_uri = url_for('google_callback', _external=True)
+        
     try:
         token_resp = requests.post('https://oauth2.googleapis.com/token', data={
             'code': code,
             'client_id': GOOGLE_CLIENT_ID,
             'client_secret': GOOGLE_CLIENT_SECRET,
-            'redirect_uri': url_for('google_callback', _external=True),
+            'redirect_uri': redirect_uri,
             'grant_type': 'authorization_code',
         })
         tokens = token_resp.json()
