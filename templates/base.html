@@ -14,7 +14,27 @@
   <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}"/>
   <link rel="apple-touch-icon" href="{{ url_for('static', filename='icon-192.png') }}"/>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}"/>
+  <meta name="csrf-token" content="{{ csrf_token() }}">
   {% block head %}{% endblock %}
+  <script>
+    // Global CSRF Protection for AJAX/Fetch
+    (function() {
+        const originalFetch = window.fetch;
+        window.fetch = async (...args) => {
+            let [resource, config] = args;
+            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+            if (csrfToken && config && config.method && !['GET', 'HEAD', 'OPTIONS', 'TRACE'].includes(config.method.toUpperCase())) {
+                if (!config.headers) config.headers = {};
+                if (config.headers instanceof Headers) {
+                    config.headers.append('X-CSRFToken', csrfToken);
+                } else {
+                    config.headers['X-CSRFToken'] = csrfToken;
+                }
+            }
+            return originalFetch(resource, config);
+        };
+    })();
+  </script>
 </head>
 <body>
 {% if current_user.is_authenticated %}
