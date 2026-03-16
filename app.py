@@ -1,5 +1,6 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy.orm import joinedload
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from flask_bcrypt import Bcrypt
 from datetime import datetime, timedelta
@@ -499,10 +500,11 @@ def setup_event():
 @app.route('/dashboard')
 @login_required
 def dashboard():
-    memberships = EventMember.query.filter_by(
-        user_id=current_user.id, status='approved').all()
-    pending = EventMember.query.filter_by(
-        user_id=current_user.id, status='pending').all()
+    # Eager load event for each membership to avoid N+1 query problem
+    memberships = EventMember.query.options(joinedload(EventMember.event)) \
+        .filter_by(user_id=current_user.id, status='approved').all()
+    pending = EventMember.query.options(joinedload(EventMember.event)) \
+        .filter_by(user_id=current_user.id, status='pending').all()
     events = [(m.event, m.role) for m in memberships]
     pending_events = [(m.event, m.role) for m in pending]
     return render_template('dashboard.html', events=events, pending_events=pending_events)
@@ -876,7 +878,11 @@ def stay_data(event_id):
     member = get_member(event_id, current_user.id)
     if not member or member.status != 'approved':
         return jsonify({'error': 'Unauthorized'}), 403
-    accommodations = Accommodation.query.filter_by(event_id=event_id).all()
+    
+    # Eager load rooms, guests and their assignments to optimize performance
+    accommodations = Accommodation.query.options(
+        joinedload(Accommodation.rooms).joinedload(Room.room_guests).joinedload(RoomGuest.guest)
+    ).filter_by(event_id=event_id).all()
     result = []
     for acc in accommodations:
         rooms_data = []
@@ -987,18 +993,21 @@ def send_notification(event_id):
     
     if receiver_id == 'all':
         if member.role != 'admin':
-            return jsonify({'error': 'Only admins can message everyone'}), 403
-        # Broadcast to all approved members except sender
-        event_members = EventMember.query.filter_by(event_id=event_id, status='approved').all()
+            return jsonify({'error': 'Unauthorized'}), 403
+        
+        event = Event.query.get(event_id)
+        # Eager load user data for all members to optimize email loop
+        event_members = EventMember.query.options(joinedload(EventMember.user)) \
+            .filter_by(event_id=event_id, status='approved').all()
+            
         for em in event_members:
             if em.user_id != current_user.id:
                 notif = Notification(event_id=event_id, sender_id=current_user.id, 
                                      receiver_id=em.user_id, message=message)
                 db.session.add(notif)
-                # Send email
-                email_sent = send_notification_email(em.user.email, f"New Notification: {Event.query.get(event_id).name}", 
+                email_sent = send_notification_email(em.user.email, f"New Notification: {event.name}", 
                                         render_template('emails/notification_email.html', 
-                                                        user=em.user, event=em.event, message=message, sender=current_user))
+                                                        user=em.user, event=event, message=message, sender=current_user))
                 if email_sent: sent_emails += 1
     
     elif receiver_id == 'admins':
