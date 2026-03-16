@@ -407,6 +407,8 @@ def google_callback():
         else:
             user.google_id = google_id
             user.avatar = picture
+            if not user.name:
+                user.name = name
             db.session.commit()
         login_user(user)
         return redirect(url_for('dashboard'))
