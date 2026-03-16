@@ -45,23 +45,64 @@
   </div>
   <div class="nav-links">
     <a href="{{ url_for('dashboard') }}" class="nav-link {% if request.endpoint == 'dashboard' %}active{% endif %}">
-      <i class="fas fa-home"></i> Dashboard
+      <i class="fas fa-home"></i> <span class="nav-text">Dashboard</span>
     </a>
     <a href="{{ url_for('setup_event') }}" class="nav-link">
-      <i class="fas fa-plus-circle"></i> New / Join
+      <i class="fas fa-plus-circle"></i> <span class="nav-text">New / Join</span>
     </a>
   </div>
   <div class="nav-user">
     {% if current_user.avatar %}
-    <img src="{{ current_user.avatar }}" alt="avatar" class="user-avatar"/>
+    <img src="{{ current_user.avatar }}" alt="avatar" class="user-avatar bubble-hover"/>
     {% else %}
-    <div class="user-avatar-placeholder">{{ (current_user.name or "?")[0].upper() }}</div>
+    <div class="user-avatar-placeholder bubble-hover">{{ (current_user.name or "?")[0].upper() }}</div>
     {% endif %}
-    <span class="user-name">{{ current_user.name }}</span>
+    <span class="user-name hide-mobile">{{ current_user.name }}</span>
     <a href="{{ url_for('logout') }}" class="nav-link logout">
       <i class="fas fa-sign-out-alt"></i>
     </a>
   </div>
+</nav>
+
+<!-- Mobile Bottom Navigation -->
+<nav class="mobile-bottom-nav">
+    <a href="{{ url_for('dashboard') }}" class="mob-nav-item {% if request.endpoint == 'dashboard' %}active{% endif %}">
+        <i class="fas fa-home"></i>
+        <span>Home</span>
+    </a>
+    <a href="{{ url_for('setup_event') }}" class="mob-nav-item {% if request.endpoint == 'setup_event' %}active{% endif %}">
+        <i class="fas fa-plus-circle"></i>
+        <span>Events</span>
+    </a>
+    {% set eid = event.id if event and event.id else (request.view_args.get('event_id') if request.view_args else none) %}
+    {% if eid %}
+        <a href="{{ url_for('guests', event_id=eid) }}" class="mob-nav-item {% if 'guests' in request.endpoint %}active{% endif %}">
+            <i class="fas fa-users"></i>
+            <span>Guests</span>
+        </a>
+        <a href="{{ url_for('stay', event_id=eid) }}" class="mob-nav-item {% if 'stay' in request.endpoint %}active{% endif %}">
+            <i class="fas fa-bed"></i>
+            <span>Stay</span>
+        </a>
+        <a href="{{ url_for('notifications', event_id=eid) }}" class="mob-nav-item {% if 'notifications' in request.endpoint %}active{% endif %}">
+            <i class="fas fa-bell"></i>
+            <span>Notifs</span>
+            <span id="unreadBadge" class="mob-badge hidden">0</span>
+        </a>
+    {% else %}
+        <a href="#" class="mob-nav-item disabled">
+            <i class="fas fa-users-slash"></i>
+            <span>Guests</span>
+        </a>
+        <a href="#" class="mob-nav-item disabled">
+            <i class="fas fa-bed"></i>
+            <span>Stay</span>
+        </a>
+        <a href="#" class="mob-nav-item disabled">
+            <i class="fas fa-bell"></i>
+            <span>Notifs</span>
+        </a>
+    {% endif %}
 </nav>
 {% endif %}
 
