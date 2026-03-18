@@ -87,6 +87,18 @@
                 {{ guests | selectattr('coming_status', 'equalto', 'no') | list | length }}
             </span>
         </button>
+        <button class="tab-btn" onclick="switchGuestTab('veg', this)">
+            <i class="fas fa-leaf" style="color:#16a34a"></i> Veg
+            <span class="tab-badge" style="background:rgba(22,163,74,0.15);color:#16a34a">
+                {{ guests | selectattr('food_preference', 'equalto', 'Veg') | list | length }}
+            </span>
+        </button>
+        <button class="tab-btn" onclick="switchGuestTab('non-veg', this)">
+            <i class="fas fa-drumstick-bite" style="color:#ea580c"></i> Non-Veg
+            <span class="tab-badge" style="background:rgba(234,88,12,0.15);color:#ea580c">
+                {{ guests | selectattr('food_preference', 'equalto', 'Non-veg') | list | length }}
+            </span>
+        </button>
         {% endif %}
     </div>
 
@@ -231,6 +243,64 @@
             <div class="empty-state small">
                 <div class="empty-icon"><i class="fas fa-calendar-check"></i></div>
                 <p>No guests declined yet</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    
+    <!-- Veg Tab -->
+    <div class="tab-panel hidden" id="tab-veg">
+        <div class="veg-list" id="vegList">
+            {% set veg_guests = guests | selectattr('food_preference', 'equalto', 'Veg') | list %}
+            {% if veg_guests %}
+            {% for guest in veg_guests %}
+            <div class="guest-row" id="vr-{{ guest.id }}" data-id="{{ guest.id }}">
+                <div class="guest-row-info">
+                    <i class="fas fa-{% if guest.is_family %}home{% else %}user{% endif %} guest-row-icon"></i>
+                    <span>{{ guest.name }}</span>
+                    {% if guest.is_family %}<span class="family-tag">Family</span>{% endif %}
+                    <span class="status-chip" style="background:rgba(22,163,74,0.15);color:#16a34a;font-size:0.7rem;padding:2px 8px">
+                        <i class="fas fa-leaf"></i> Veg
+                    </span>
+                </div>
+                <div class="toggle-wrap" style="gap:8px">
+                    <button class="btn btn-ghost btn-sm" onclick="document.querySelector('#guest-card-{{ guest.id }} .icon-btn[title=\'Edit\']').click()">Edit</button>
+                </div>
+            </div>
+            {% endfor %}
+            {% else %}
+            <div class="empty-state small">
+                <div class="empty-icon"><i class="fas fa-leaf"></i></div>
+                <p>No veg guests yet</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Non-Veg Tab -->
+    <div class="tab-panel hidden" id="tab-non-veg">
+        <div class="non-veg-list" id="nonVegList">
+            {% set non_veg_guests = guests | selectattr('food_preference', 'equalto', 'Non-veg') | list %}
+            {% if non_veg_guests %}
+            {% for guest in non_veg_guests %}
+            <div class="guest-row" id="nvr-{{ guest.id }}" data-id="{{ guest.id }}">
+                <div class="guest-row-info">
+                    <i class="fas fa-{% if guest.is_family %}home{% else %}user{% endif %} guest-row-icon"></i>
+                    <span>{{ guest.name }}</span>
+                    {% if guest.is_family %}<span class="family-tag">Family</span>{% endif %}
+                    <span class="status-chip" style="background:rgba(234,88,12,0.15);color:#ea580c;font-size:0.7rem;padding:2px 8px">
+                        <i class="fas fa-drumstick-bite"></i> Non-Veg
+                    </span>
+                </div>
+                <div class="toggle-wrap" style="gap:8px">
+                    <button class="btn btn-ghost btn-sm" onclick="document.querySelector('#guest-card-{{ guest.id }} .icon-btn[title=\'Edit\']').click()">Edit</button>
+                </div>
+            </div>
+            {% endfor %}
+            {% else %}
+            <div class="empty-state small">
+                <div class="empty-icon"><i class="fas fa-drumstick-bite"></i></div>
+                <p>No non-veg guests yet</p>
             </div>
             {% endif %}
         </div>
