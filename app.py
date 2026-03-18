@@ -107,6 +107,7 @@ class Guest(db.Model):
     coming_status = db.Column(db.String(10), default='')   # yes / no / ''
     travel_mode = db.Column(db.String(10), default='')  # Train / Car / ''
     ticket_status = db.Column(db.String(10), default='')  # done / pending / ''
+    food_preference = db.Column(db.String(10), default='Veg') # Veg / Non-veg
     added_by = db.Column(db.Integer, db.ForeignKey('user.id'))
     parent_id = db.Column(db.Integer, db.ForeignKey('guest.id'), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -663,8 +664,10 @@ def add_guest(event_id):
         return jsonify({'error': 'Name is required'}), 400
         
     # Create the primary guest record
+    food_preference = data.get('food_preference', 'Veg')
     primary_guest = Guest(event_id=event_id, name=name, is_family=is_family,
-                         family_members=json.dumps(family_members), added_by=current_user.id)
+                         family_members=json.dumps(family_members), added_by=current_user.id,
+                         food_preference=food_preference)
     db.session.add(primary_guest)
     db.session.flush() # Get ID for children
     
@@ -676,7 +679,8 @@ def add_guest(event_id):
                                added_by=current_user.id, parent_id=primary_guest.id,
                                coming_status=primary_guest.coming_status,
                                travel_mode=primary_guest.travel_mode,
-                               ticket_status=primary_guest.ticket_status)
+                               ticket_status=primary_guest.ticket_status,
+                               food_preference=primary_guest.food_preference)
                 db.session.add(m_guest)
                 
     db.session.commit()
@@ -702,6 +706,9 @@ def update_guest(event_id, guest_id):
     
     if 'ticket_status' in data:
         guest.ticket_status = data['ticket_status']
+    
+    if 'food_preference' in data:
+        guest.food_preference = data['food_preference']
 
     # Handle Family Syncing
     if guest.is_family and 'family_members' in data and guest.parent_id is None:
@@ -722,7 +729,8 @@ def update_guest(event_id, guest_id):
                                   added_by=current_user.id, parent_id=guest.id,
                                   coming_status=guest.coming_status,
                                   travel_mode=guest.travel_mode,
-                                  ticket_status=guest.ticket_status)
+                                  ticket_status=guest.ticket_status,
+                                  food_preference=guest.food_preference)
                 db.session.add(new_child)
         
         # Remove those not in new list
@@ -738,6 +746,7 @@ def update_guest(event_id, guest_id):
         if 'coming_status' in data: child_updates['coming_status'] = data['coming_status']
         if 'travel_mode' in data: child_updates['travel_mode'] = data['travel_mode']
         if 'ticket_status' in data: child_updates['ticket_status'] = data['ticket_status']
+        if 'food_preference' in data: child_updates['food_preference'] = data['food_preference']
         
         if child_updates:
             Guest.query.filter_by(parent_id=guest.id).update(child_updates)
@@ -774,6 +783,7 @@ def guest_to_dict(g):
         'coming_status': g.coming_status,
         'travel_mode': g.travel_mode,
         'ticket_status': g.ticket_status,
+        'food_preference': g.food_preference,
         'parent_id': g.parent_id,
         'parent_name': g.parent.name if g.parent else None,
         'created_at': g.created_at.strftime('%Y-%m-%d')

@@ -2195,10 +2195,13 @@ body.auth-body .main-content {
     .btn { width: 100%; justify-content: center; padding: 12px 20px; }
     .event-nav { overflow-x: auto; padding-bottom: 8px; -webkit-overflow-scrolling: touch; }
     .event-nav-item { padding: 8px 14px; font-size: 0.8rem; }
-    .accommodation-header, .travel-card, .guest-row, .approval-card {
+    .accommodation-header, .travel-card, .guest-row, .approval-card, .member-card {
         flex-direction: column; align-items: stretch; gap: 14px;
     }
-    .acc-actions, .travel-options, .approval-actions { width: 100%; justify-content: space-between; }
+    .acc-actions, .travel-options, .approval-actions, .member-actions { width: 100%; justify-content: space-between; margin-left: 0; padding-left: 0; display: flex; }
+    .member-avatar { margin: 0 auto; }
+    .member-info { text-align: center; }
+    .member-role { justify-content: center; }
     .modal { margin: 10px; max-height: 90vh; overflow-y: auto; }
     .stat-num { font-size: 1.4rem; }
     .rooms-grid { grid-template-columns: 1fr; }

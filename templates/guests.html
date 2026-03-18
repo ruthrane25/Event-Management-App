@@ -126,6 +126,9 @@
                             <i class="fas fa-times"></i> Not Coming
                         </span>
                         {% endif %}
+                        <span class="status-chip" style="background:var(--bg-card);color:var(--text-secondary);border:1px solid var(--border);">
+                            <i class="fas fa-utensils"></i> {{ guest.food_preference }}
+                        </span>
                     </div>
                 </div>
                 {% if is_admin_or_manager or guest.added_by == current_user.id %}
@@ -135,6 +138,7 @@
                         data-name="{{ guest.name }}"
                         data-is-family="{{ 'true' if guest.is_family else 'false' }}"
                         data-family-members='{{ guest.family_members|safe if guest.family_members else "[]" }}'
+                        data-food-pref="{{ guest.food_preference }}"
                         onclick="openEditGuestModal(this)" title="Edit">
                         <i class="fas fa-edit"></i>
                     </button>
@@ -247,6 +251,14 @@
                 <input type="text" class="form-input" id="guestName" placeholder="e.g. Mandar Rane"
                     autocomplete="off" />
             </div>
+            
+            <div class="form-group">
+                <label class="form-label">Food Preference</label>
+                <select class="form-input" id="guestFoodPref">
+                    <option value="Veg">Veg</option>
+                    <option value="Non-veg">Non-veg</option>
+                </select>
+            </div>
 
             <div class="form-group">
                 <label class="toggle-wrap">
@@ -294,6 +306,13 @@
                 <label class="form-label">Guest Name</label>
                 <input type="text" class="form-input" id="editGuestName" placeholder="Full name" autocomplete="off" />
             </div>
+            <div class="form-group">
+                <label class="form-label">Food Preference</label>
+                <select class="form-input" id="editGuestFoodPref">
+                    <option value="Veg">Veg</option>
+                    <option value="Non-veg">Non-veg</option>
+                </select>
+            </div>
             <div id="editFamilySection" class="hidden">
                 <div class="form-group">
                     <label class="form-label">Family Members</label>
@@ -337,6 +356,7 @@
     function openAddGuestModal() {
         familyMembers = [];
         document.getElementById('guestName').value = '';
+        document.getElementById('guestFoodPref').value = 'Veg';
         document.getElementById('isFamilyToggle').checked = false;
         document.getElementById('familySection').classList.add('hidden');
         document.getElementById('familyMemberInput').value = '';
@@ -386,9 +406,11 @@
         const name = btn.dataset.name;
         const isFamily = btn.dataset.isFamily === 'true';
         const familyJson = btn.dataset.familyMembers;
+        const foodPref = btn.dataset.foodPref || 'Veg';
 
         document.getElementById('editGuestId').value = id;
         document.getElementById('editGuestName').value = name;
+        document.getElementById('editGuestFoodPref').value = foodPref;
         
         if (isFamily) {
             document.getElementById('editFamilySection').classList.remove('hidden');
@@ -457,11 +479,12 @@
         const eid = btn.dataset.eventId;
         const name = document.getElementById('guestName').value.trim();
         const isFamily = document.getElementById('isFamilyToggle').checked;
+        const foodPref = document.getElementById('guestFoodPref').value;
         if (!name) { showToast('Please enter a guest name', 'error'); return; }
         const res = await fetch(`/event/${eid}/guests/add`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name, is_family: isFamily, family_members: familyMembers })
+            body: JSON.stringify({ name, is_family: isFamily, family_members: familyMembers, food_preference: foodPref })
         });
         const data = await res.json();
         if (data.success) {
@@ -476,12 +499,13 @@
     async function submitEditGuest() {
         const guestId = document.getElementById('editGuestId').value;
         const name = document.getElementById('editGuestName').value.trim();
+        const foodPref = document.getElementById('editGuestFoodPref').value;
         if (!name) { showToast('Name is required', 'error'); return; }
         
         const res = await fetch(`/event/${eventId}/guests/${guestId}/update`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name, family_members: editFamilyMembers })
+            body: JSON.stringify({ name, family_members: editFamilyMembers, food_preference: foodPref })
         });
         const data = await res.json();
         if (data.success) {
