@@ -680,14 +680,20 @@ def guests(event_id):
                            is_admin=is_admin(event_id, current_user.id),
                            is_admin_or_manager=is_admin_or_manager(event_id, current_user.id))
 
-@app.route('/event/<int:event_id>/guests/add', methods=['POST'])
+@app.route('/event/<event_id>/guests/add', methods=['POST'])
 @login_required
 def add_guest(event_id):
+    if not ObjectId.is_valid(event_id):
+        return jsonify({'error': 'Invalid event ID'}), 400
+        
     member = get_member(event_id, current_user.id)
-    if not member or member.status != 'approved':
+    if not member or member.get('status') != 'approved':
         return jsonify({'error': 'Unauthorized'}), 403
     
-    event = Event.query.get_or_404(event_id)
+    event = db.events.find_one({"_id": ObjectId(event_id)})
+    if not event:
+        return jsonify({'error': 'Event not found'}), 404
+        
     data = request.get_json()
     name = data.get('name', '').strip()
     is_family = data.get('is_family', False)
@@ -696,28 +702,58 @@ def add_guest(event_id):
     if not name:
         return jsonify({'error': 'Name is required'}), 400
         
-    # Create the primary guest record
     food_preference = data.get('food_preference', 'Veg')
-    primary_guest = Guest(event_id=event_id, name=name, is_family=is_family,
-                         family_members=json.dumps(family_members), added_by=current_user.id,
-                         food_preference=food_preference)
-    db.session.add(primary_guest)
-    db.session.flush() # Get ID for children
+    primary_guest = {
+        "event_id": ObjectId(event_id),
+        "name": name,
+        "is_family": is_family,
+        "family_members": json.dumps(family_members),
+        "added_by": ObjectId(current_user.id),
+        "food_preference": food_preference,
+        "coming_status": "coming",
+        "travel_mode": "not_decided",
+        "ticket_status": "not_booked",
+        "parent_id": None
+    }
     
-    # If family, create individual records for each member
+    result = db.guests.insert_one(primary_guest)
+    primary_guest_id = result.inserted_id
+    
     if is_family and family_members:
+        member_docs = []
         for m_name in family_members:
             if m_name.strip():
-                m_guest = Guest(event_id=event_id, name=m_name.strip(), is_family=True,
-                               added_by=current_user.id, parent_id=primary_guest.id,
-                               coming_status=primary_guest.coming_status,
-                               travel_mode=primary_guest.travel_mode,
-                               ticket_status=primary_guest.ticket_status,
-                               food_preference=primary_guest.food_preference)
-                db.session.add(m_guest)
-                
-    db.session.commit()
-    return jsonify({'success': True, 'guest': guest_to_dict(primary_guest)})
+                m_guest = {
+                    "event_id": ObjectId(event_id),
+                    "name": m_name.strip(),
+                    "is_family": True,
+                    "family_members": "[]",
+                    "added_by": ObjectId(current_user.id),
+                    "food_preference": food_preference,
+                    "coming_status": "coming",
+                    "travel_mode": "not_decided",
+                    "ticket_status": "not_booked",
+                    "parent_id": primary_guest_id
+                }
+                member_docs.append(m_guest)
+        if member_docs:
+            db.guests.insert_many(member_docs)
+            
+    return jsonify({
+        'success': True, 
+        'guest': {
+            'id': str(primary_guest_id),
+            'name': name,
+            'is_family': is_family,
+            'family_members': primary_guest['family_members'],
+            'added_by': str(current_user.id),
+            'food_preference': food_preference,
+            'coming_status': "coming",
+            'travel_mode': "not_decided",
+            'ticket_status': "not_booked",
+            'parent_id': None
+        }
+    })
 
 @app.route('/event/<event_id>/guests/<guest_id>/update', methods=['POST'])
 @login_required
@@ -1107,6 +1143,9 @@ def notifications(event_id):
 @app.route('/event/<event_id>/notifications/send', methods=['POST'])
 @login_required
 def send_notification(event_id):
+    if not ObjectId.is_valid(event_id):
+        return jsonify({'error': 'Invalid Event ID'}), 400
+        
     member = get_member(event_id, current_user.id)
     if not member or member.get('status') != 'approved':
         return jsonify({'error': 'Unauthorized'}), 403
@@ -1194,6 +1233,9 @@ def send_notification(event_id):
 @app.route('/event/<event_id>/notifications/mark-read', methods=['POST'])
 @login_required
 def mark_notifications_read(event_id):
+    if not ObjectId.is_valid(event_id):
+        return jsonify({'success': False, 'error': 'Invalid event ID'})
+        
     db.notifications.update_many(
         {"event_id": ObjectId(event_id), "receiver_id": ObjectId(current_user.id), "is_read": False},
         {"$set": {"is_read": True}}
@@ -1203,6 +1245,9 @@ def mark_notifications_read(event_id):
 @app.route('/event/<event_id>/notifications/unread-count')
 @login_required
 def unread_count(event_id):
+    if not ObjectId.is_valid(event_id):
+        return jsonify({'count': 0})
+        
     count = db.notifications.count_documents({
         "event_id": ObjectId(event_id), 
         "receiver_id": ObjectId(current_user.id), 
