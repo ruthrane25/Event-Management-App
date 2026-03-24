@@ -24,7 +24,9 @@ app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1, x_for=1, x_port=1)
 Talisman(app, content_security_policy=None)
 CSRFProtect(app)
 
+from datetime import timedelta
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'eventapp-secret-key-2024')
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=365)
 
 # Optimize PyMongo for Serverless/Vercel
 import certifi
@@ -175,7 +177,8 @@ def login():
         try:
             user_dict = db.users.find_one({"email": email})
             if user_dict and user_dict.get('password') and bcrypt.check_password_hash(user_dict['password'], password):
-                login_user(User(user_dict))
+                session.permanent = True
+                login_user(User(user_dict), remember=True)
                 return redirect(url_for('dashboard'))
             flash('Invalid email or password.', 'error')
         except Exception as e:
@@ -265,7 +268,8 @@ def verify_otp():
                 
                 db.otp_verifications.delete_many({"email": email})
                 
-                login_user(User(new_user))
+                session.permanent = True
+                login_user(User(new_user), remember=True)
                 session.pop('pending_email', None)
                 flash('Account verified and created!', 'success')
                 return redirect(url_for('setup_event'))
@@ -372,7 +376,8 @@ def google_callback():
             db.users.update_one({"_id": user_dict["_id"]}, {"$set": update})
             user_dict.update(update)
             
-        login_user(User(user_dict))
+        session.permanent = True
+        login_user(User(user_dict), remember=True)
         return redirect(url_for('dashboard'))
     except Exception as e:
         flash('Google login failed. Please try manual login.', 'error')
