@@ -1092,6 +1092,11 @@ def travel(event_id):
     guests = []
     for g in guests_cursor:
         g['id'] = str(g['_id'])
+        if g.get('parent_id'):
+            parent = db.guests.find_one({"_id": g.get('parent_id')})
+            if parent:
+                parent['id'] = str(parent['_id'])
+                g['parent'] = parent
         guests.append(g)
         
     return render_template('travel.html', event=event, guests=guests,
