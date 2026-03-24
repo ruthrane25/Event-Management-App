@@ -1,6 +1,6 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session
-from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy.orm import joinedload
+from pymongo import MongoClient
+from bson.objectid import ObjectId
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from flask_bcrypt import Bcrypt
 from datetime import datetime, timedelta
@@ -21,39 +21,26 @@ app = Flask(__name__)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1, x_for=1, x_port=1)
 
 # Security: Enable headers and CSRF protection
-# We set content_security_policy=None initially to avoid breaking existing styles/scripts
-# But HSTS, X-Frame-Options, etc. will be enabled.
 Talisman(app, content_security_policy=None)
 CSRFProtect(app)
 
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'eventapp-secret-key-2024')
-db_url = os.environ.get('DATABASE_URL', 'sqlite:///event_app.db')
-if db_url.startswith("postgres://"):
-    db_url = db_url.replace("postgres://", "postgresql://", 1)
-app.config['SQLALCHEMY_DATABASE_URI'] = db_url
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['PREFERRED_URL_SCHEME'] = 'https' # Force HTTPS in generated links
 
-# Optimize SQLAlchemy for Serverless/Vercel (Cold Starts)
-app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
-    "pool_size": 1,
-    "max_overflow": 0,
-    "pool_recycle": 3600,
-    "pool_pre_ping": True,
-}
+# Optimize PyMongo for Serverless/Vercel
+db_url = os.environ.get('DATABASE_URL', 'mongodb://localhost:27017/')
+client = MongoClient(db_url, maxPoolSize=1, serverSelectionTimeoutMS=5000)
+db = client.get_default_database('event_app') if 'event_app' not in db_url else client.get_database()
 
-db = SQLAlchemy(app)
 bcrypt = Bcrypt(app)
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
-
-# Note: Database tables are initialized via /init-db route if needed.
-# Removed global db.create_all() to speed up Vercel cold starts.
 
 # Jinja2 custom filter
 @app.template_filter('from_json')
 def from_json_filter(value):
     try:
+        if isinstance(value, list):
+            return value
         return json.loads(value or '[]')
     except Exception:
         return []
@@ -69,97 +56,32 @@ if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
     print("  Google Sign-In will fail until these are configured.\n")
 
 # ─────────────────────────────────────────────
-#  MODELS
+#  MODELS (PyMongo Wrappers)
 # ─────────────────────────────────────────────
 
-class User(UserMixin, db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(150), nullable=False)
-    email = db.Column(db.String(150), unique=True, nullable=False)
-    password = db.Column(db.String(256))
-    google_id = db.Column(db.String(100))
-    avatar = db.Column(db.String(300), default='')
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+class User(UserMixin):
+    def __init__(self, user_dict):
+        self.id = str(user_dict.get('_id'))
+        self.name = user_dict.get('name', '')
+        self.email = user_dict.get('email', '')
+        self.password = user_dict.get('password', '')
+        self.google_id = user_dict.get('google_id', '')
+        self.avatar = user_dict.get('avatar', '')
+        self.created_at = user_dict.get('created_at', datetime.utcnow())
 
-class Event(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(200), nullable=False)
-    unique_code = db.Column(db.String(10), unique=True, nullable=False)
-    description = db.Column(db.Text, default='')
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-
-class EventMember(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    event_id = db.Column(db.Integer, db.ForeignKey('event.id'), nullable=False)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    role = db.Column(db.String(20), default='member')  # admin, manager, member
-    status = db.Column(db.String(20), default='pending')  # pending, approved, rejected
-    joined_at = db.Column(db.DateTime, default=datetime.utcnow)
-    event = db.relationship('Event', backref='members')
-    user = db.relationship('User', backref='event_memberships')
-
-class Guest(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    event_id = db.Column(db.Integer, db.ForeignKey('event.id'), nullable=False)
-    name = db.Column(db.String(200), nullable=False)
-    is_family = db.Column(db.Boolean, default=False)
-    family_members = db.Column(db.Text, default='[]')  # JSON list of names
-    coming_status = db.Column(db.String(10), default='')   # yes / no / ''
-    travel_mode = db.Column(db.String(10), default='')  # Train / Car / ''
-    ticket_status = db.Column(db.String(10), default='')  # done / pending / ''
-    food_preference = db.Column(db.String(10), default='Veg') # Veg / Non-veg
-    added_by = db.Column(db.Integer, db.ForeignKey('user.id'))
-    parent_id = db.Column(db.Integer, db.ForeignKey('guest.id'), nullable=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    
-    event = db.relationship('Event', backref='guests')
-    parent = db.relationship('Guest', remote_side=[id], backref=db.backref('children', cascade="all, delete-orphan"))
-
-class Accommodation(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    event_id = db.Column(db.Integer, db.ForeignKey('event.id'), nullable=False)
-    place_name = db.Column(db.String(200), nullable=False)  # Hotel or Villa
-    place_type = db.Column(db.String(20), default='Hotel')  # Hotel / Villa
-    event = db.relationship('Event', backref='accommodations')
-
-class Room(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    accommodation_id = db.Column(db.Integer, db.ForeignKey('accommodation.id'), nullable=False)
-    room_number = db.Column(db.String(50), nullable=False)
-    accommodation = db.relationship('Accommodation', backref='rooms')
-
-class RoomGuest(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    room_id = db.Column(db.Integer, db.ForeignKey('room.id'), nullable=False)
-    guest_id = db.Column(db.Integer, db.ForeignKey('guest.id'), nullable=False)
-    room = db.relationship('Room', backref='room_guests')
-    guest = db.relationship('Guest', backref='room_assignments')
-
-class Notification(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    event_id = db.Column(db.Integer, db.ForeignKey('event.id'), nullable=False)
-    sender_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    receiver_id = db.Column(db.Integer, db.ForeignKey('user.id')) # NULL for broadcast
-    message = db.Column(db.Text, nullable=False)
-    is_read = db.Column(db.Boolean, default=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-
-    event = db.relationship('Event', backref='notifications')
-    sender = db.relationship('User', foreign_keys=[sender_id], backref='sent_notifications')
-    receiver = db.relationship('User', foreign_keys=[receiver_id], backref='received_notifications')
-
-class OTPVerification(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    email = db.Column(db.String(120), nullable=False)
-    name = db.Column(db.String(100), nullable=False)
-    password = db.Column(db.String(200), nullable=False)
-    otp_code = db.Column(db.String(6), nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-
+    @staticmethod
+    def get(user_id):
+        try:
+            user_dict = db.users.find_one({"_id": ObjectId(user_id)})
+            if user_dict:
+                return User(user_dict)
+        except Exception:
+            pass
+        return None
 
 @login_manager.user_loader
 def load_user(user_id):
-    return db.session.get(User, int(user_id))
+    return User.get(user_id)
 
 
 # ─────────────────────────────────────────────
@@ -169,19 +91,25 @@ def load_user(user_id):
 def generate_event_code():
     while True:
         code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
-        if not Event.query.filter_by(unique_code=code).first():
+        if not db.events.find_one({"unique_code": code}):
             return code
 
 def get_member(event_id, user_id):
-    return EventMember.query.filter_by(event_id=event_id, user_id=user_id).first()
+    try:
+        return db.event_members.find_one({
+            "event_id": ObjectId(event_id) if isinstance(event_id, str) else event_id,
+            "user_id": ObjectId(user_id) if isinstance(user_id, str) else user_id
+        })
+    except Exception:
+        return None
 
 def is_admin(event_id, user_id):
     m = get_member(event_id, user_id)
-    return m and m.role == 'admin'
+    return m and m.get('role') == 'admin'
 
 def is_admin_or_manager(event_id, user_id):
     m = get_member(event_id, user_id)
-    return m and m.role in ('admin', 'manager')
+    return m and m.get('role') in ('admin', 'manager')
 
 import smtplib
 from email.mime.text import MIMEText
@@ -218,9 +146,10 @@ def send_notification_email(recipient_email, subject, body_html):
 @app.route('/init-db')
 def init_db():
     try:
-        with app.app_context():
-            db.create_all()
-        return "<h1>Database Success!</h1><p>Tables have been created. <a href='/login'>Go to Login</a></p>"
+        # Create necessary indexes for PyMongo collections
+        db.users.create_index("email", unique=True)
+        db.events.create_index("unique_code", unique=True)
+        return "<h1>Database Success!</h1><p>Indexes created. <a href='/login'>Go to Login</a></p>"
     except Exception as e:
         return f"<h1>Database Error</h1><p>{str(e)}</p>"
 
@@ -243,9 +172,9 @@ def login():
         email = request.form.get('email', '').strip().lower()
         password = request.form.get('password', '')
         try:
-            user = User.query.filter_by(email=email).first()
-            if user and user.password and bcrypt.check_password_hash(user.password, password):
-                login_user(user)
+            user_dict = db.users.find_one({"email": email})
+            if user_dict and user_dict.get('password') and bcrypt.check_password_hash(user_dict['password'], password):
+                login_user(User(user_dict))
                 return redirect(url_for('dashboard'))
             flash('Invalid email or password.', 'error')
         except Exception as e:
@@ -269,7 +198,7 @@ def register():
             flash('Passwords do not match.', 'error')
             return render_template('auth.html', mode='register')
         try:
-            if User.query.filter_by(email=email).first():
+            if db.users.find_one({"email": email}):
                 flash('Email already registered.', 'error')
                 return render_template('auth.html', mode='register')
             
@@ -279,12 +208,17 @@ def register():
             hashed = bcrypt.generate_password_hash(password).decode('utf-8')
             
             # Clear existing OTPs for this email
-            OTPVerification.query.filter_by(email=email).delete()
+            db.otp_verifications.delete_many({"email": email})
             
             # Store pending registration
-            new_otp = OTPVerification(email=email, name=name, password=hashed, otp_code=otp)
-            db.session.add(new_otp)
-            db.session.commit()
+            new_otp = {
+                "email": email, 
+                "name": name, 
+                "password": hashed, 
+                "otp_code": otp,
+                "created_at": datetime.utcnow()
+            }
+            db.otp_verifications.insert_one(new_otp)
             
             # Send OTP Email
             sent = send_notification_email(email, "Verify your EventFlow Account", 
@@ -310,21 +244,27 @@ def verify_otp():
     if request.method == 'POST':
         otp = request.form.get('otp', '').strip()
         try:
-            record = OTPVerification.query.filter_by(email=email, otp_code=otp).first()
+            record = db.otp_verifications.find_one({"email": email, "otp_code": otp})
             
             if record:
                 # Check for expiry (e.g., 10 minutes)
-                if datetime.utcnow() - record.created_at > timedelta(minutes=10):
+                if datetime.utcnow() - record.get('created_at', datetime.utcnow()) > timedelta(minutes=10):
                     flash('OTP has expired. Please resend.', 'error')
                     return render_template('verify_otp.html', email=email)
                 
                 # Create actual user
-                user = User(name=record.name, email=record.email, password=record.password)
-                db.session.add(user)
-                db.session.delete(record)
-                db.session.commit()
+                new_user = {
+                    "name": record['name'], 
+                    "email": record['email'], 
+                    "password": record['password'],
+                    "created_at": datetime.utcnow()
+                }
+                res = db.users.insert_one(new_user)
+                new_user['_id'] = res.inserted_id
                 
-                login_user(user)
+                db.otp_verifications.delete_many({"email": email})
+                
+                login_user(User(new_user))
                 session.pop('pending_email', None)
                 flash('Account verified and created!', 'success')
                 return redirect(url_for('setup_event'))
@@ -342,18 +282,19 @@ def resend_otp():
     if not email:
         return redirect(url_for('register'))
     
-    record = OTPVerification.query.filter_by(email=email).order_by(OTPVerification.created_at.desc()).first()
+    record = db.otp_verifications.find_one({"email": email}, sort=[("created_at", -1)])
     if not record:
         return redirect(url_for('register'))
     
     import random
     otp = str(random.randint(100000, 999999))
-    record.otp_code = otp
-    record.created_at = datetime.utcnow()
-    db.session.commit()
+    db.otp_verifications.update_one(
+        {"_id": record["_id"]},
+        {"$set": {"otp_code": otp, "created_at": datetime.utcnow()}}
+    )
     
     sent = send_notification_email(email, "New Verification Code - EventFlow", 
-                                   render_template('emails/otp_email.html', name=record.name, otp=otp))
+                                   render_template('emails/otp_email.html', name=record['name'], otp=otp))
     if sent:
         flash('New verification code sent!', 'success')
     else:
@@ -410,18 +351,27 @@ def google_callback():
         email = userinfo.get('email', '').lower()
         name = userinfo.get('name', email)
         picture = userinfo.get('picture', '')
-        user = User.query.filter_by(email=email).first()
-        if not user:
-            user = User(name=name, email=email, google_id=google_id, avatar=picture)
-            db.session.add(user)
-            db.session.commit()
+        
+        user_dict = db.users.find_one({"email": email})
+        if not user_dict:
+            new_user = {
+                "name": name, 
+                "email": email, 
+                "google_id": google_id, 
+                "avatar": picture,
+                "created_at": datetime.utcnow()
+            }
+            res = db.users.insert_one(new_user)
+            new_user['_id'] = res.inserted_id
+            user_dict = new_user
         else:
-            user.google_id = google_id
-            user.avatar = picture
-            if not user.name:
-                user.name = name
-            db.session.commit()
-        login_user(user)
+            update = {"google_id": google_id, "avatar": picture}
+            if not user_dict.get('name'):
+                update['name'] = name
+            db.users.update_one({"_id": user_dict["_id"]}, {"$set": update})
+            user_dict.update(update)
+            
+        login_user(User(user_dict))
         return redirect(url_for('dashboard'))
     except Exception as e:
         flash('Google login failed. Please try manual login.', 'error')
@@ -449,45 +399,64 @@ def setup_event():
                 flash('Event name is required.', 'error')
                 return render_template('setup_event.html')
             code = generate_event_code()
-            event = Event(name=event_name, unique_code=code)
-            db.session.add(event)
-            db.session.flush()
-            member = EventMember(event_id=event.id, user_id=current_user.id,
-                                  role='admin', status='approved')
-            db.session.add(member)
-            db.session.commit()
+            new_event = {
+                "name": event_name, 
+                "unique_code": code, 
+                "description": "", 
+                "created_at": datetime.utcnow()
+            }
+            res = db.events.insert_one(new_event)
+            event_id = res.inserted_id
+            
+            member = {
+                "event_id": event_id, 
+                "user_id": ObjectId(current_user.id),
+                "role": 'admin', 
+                "status": 'approved',
+                "joined_at": datetime.utcnow()
+            }
+            db.event_members.insert_one(member)
             flash(f'Event created! Your event code is: {code}', 'success')
-            return redirect(url_for('event_dashboard', event_id=event.id))
+            return redirect(url_for('event_dashboard', event_id=str(event_id)))
+            
         elif action == 'join':
             event_code = request.form.get('event_code', '').strip().upper()
-            event = Event.query.filter_by(unique_code=event_code).first()
+            event = db.events.find_one({"unique_code": event_code})
             if not event:
                 flash('Invalid event code.', 'error')
                 return render_template('setup_event.html')
-            existing = get_member(event.id, current_user.id)
+                
+            existing = get_member(event["_id"], current_user.id)
             if existing:
                 flash('You are already part of this event.', 'info')
-                return redirect(url_for('event_dashboard', event_id=event.id))
-            member = EventMember(event_id=event.id, user_id=current_user.id,
-                                  role='member', status='pending')
-            db.session.add(member)
-            db.session.commit()
+                return redirect(url_for('event_dashboard', event_id=str(event["_id"])))
+                
+            member = {
+                "event_id": event["_id"], 
+                "user_id": ObjectId(current_user.id),
+                "role": 'member', 
+                "status": 'pending',
+                "joined_at": datetime.utcnow()
+            }
+            db.event_members.insert_one(member)
             
             # Send Join Request Pending Email to Applicant
-            send_notification_email(current_user.email, f"Join Request: {event.name}", 
+            send_notification_email(current_user.email, f"Join Request: {event['name']}", 
                                    render_template('emails/join_request_pending.html', 
                                                   user_name=current_user.name, 
-                                                  event_name=event.name))
+                                                  event_name=event['name']))
             
             # Send Notification to Admin
-            admin_member = EventMember.query.filter_by(event_id=event.id, role='admin').first()
-            if admin_member and admin_member.user:
-                send_notification_email(admin_member.user.email, f"New Join Request: {event.name}",
-                                       render_template('emails/admin_new_request.html',
-                                                      event_name=event.name,
-                                                      applicant_name=current_user.name,
-                                                      applicant_email=current_user.email,
-                                                      dashboard_url=url_for('event_dashboard', event_id=event.id, _external=True)))
+            admin_member = db.event_members.find_one({"event_id": event["_id"], "role": 'admin'})
+            if admin_member:
+                admin_user = db.users.find_one({"_id": admin_member["user_id"]})
+                if admin_user:
+                    send_notification_email(admin_user['email'], f"New Join Request: {event['name']}",
+                                           render_template('emails/admin_new_request.html',
+                                                          event_name=event['name'],
+                                                          applicant_name=current_user.name,
+                                                          applicant_email=current_user.email,
+                                                          dashboard_url=url_for('event_dashboard', event_id=str(event["_id"]), _external=True)))
                                                   
             flash('Request submitted! Waiting for admin approval.', 'success')
             return redirect(url_for('dashboard'))
@@ -501,13 +470,23 @@ def setup_event():
 @app.route('/dashboard')
 @login_required
 def dashboard():
-    # Eager load event for each membership to avoid N+1 query problem
-    memberships = EventMember.query.options(joinedload(EventMember.event)) \
-        .filter_by(user_id=current_user.id, status='approved').all()
-    pending = EventMember.query.options(joinedload(EventMember.event)) \
-        .filter_by(user_id=current_user.id, status='pending').all()
-    events = [(m.event, m.role) for m in memberships]
-    pending_events = [(m.event, m.role) for m in pending]
+    memberships = list(db.event_members.find({"user_id": ObjectId(current_user.id), "status": 'approved'}))
+    pending = list(db.event_members.find({"user_id": ObjectId(current_user.id), "status": 'pending'}))
+    
+    events = []
+    for m in memberships:
+        evt = db.events.find_one({"_id": m["event_id"]})
+        if evt:
+            evt['id'] = str(evt['_id'])
+            events.append((evt, m["role"]))
+            
+    pending_events = []
+    for m in pending:
+        evt = db.events.find_one({"_id": m["event_id"]})
+        if evt:
+            evt['id'] = str(evt['_id'])
+            pending_events.append((evt, m["role"]))
+            
     return render_template('dashboard.html', events=events, pending_events=pending_events)
 
 
@@ -515,28 +494,54 @@ def dashboard():
 #  EVENT DASHBOARD
 # ─────────────────────────────────────────────
 
-@app.route('/event/<int:event_id>')
+@app.route('/event/<event_id>')
 @login_required
 def event_dashboard(event_id):
-    event = Event.query.get_or_404(event_id)
+    try:
+        event = db.events.find_one({"_id": ObjectId(event_id)})
+    except Exception:
+        event = None
+        
+    if not event:
+        flash('Event not found.', 'error')
+        return redirect(url_for('dashboard'))
+    event['id'] = str(event['_id'])
+        
     member = get_member(event_id, current_user.id)
-    if not member or member.status != 'approved':
+    if not member or member.get('status') != 'approved':
         flash('Access denied.', 'error')
         return redirect(url_for('dashboard'))
-    members = EventMember.query.filter_by(event_id=event_id).all()
-    pending_approvals = EventMember.query.filter_by(event_id=event_id, status='pending').all()
+        
+    members_docs = list(db.event_members.find({"event_id": ObjectId(event_id)}))
+    members = []
+    for m in members_docs:
+        u = db.users.find_one({"_id": m["user_id"]})
+        m['id'] = str(m['_id'])
+        if u:
+            u['id'] = str(u['_id'])
+            m['user'] = u
+            members.append(m)
+            
+    pending_approvals = [m for m in members if m.get('status') == 'pending']
+    
     return render_template('event_dashboard.html', event=event, member=member,
                            members=members, pending_approvals=pending_approvals,
                             is_admin=is_admin(event_id, current_user.id),
                             is_admin_or_manager=is_admin_or_manager(event_id, current_user.id))
 
 
-@app.route('/event/<int:event_id>/share-code', methods=['POST'])
+@app.route('/event/<event_id>/share-code', methods=['POST'])
 @login_required
 def share_event_code(event_id):
-    event = Event.query.get_or_404(event_id)
+    try:
+        event = db.events.find_one({"_id": ObjectId(event_id)})
+    except Exception:
+        event = None
+    if not event:
+        return jsonify({'error': 'Event not found'}), 404
+        
     member = get_member(event_id, current_user.id)
-    if not member or member.status != 'approved':
+    if not member or member.get('status') != 'approved':
         return jsonify({'error': 'Unauthorized'}), 403
     
     data = request.get_json()
@@ -548,11 +553,11 @@ def share_event_code(event_id):
     dashboard_url = url_for('dashboard', _external=True)
     
     # Send Sharing Email
-    subject = f"Invitation to join '{event.name}' on EventFlow"
+    subject = f"Invitation to join '{event['name']}' on EventFlow"
     body_html = render_template('emails/share_event_code.html', 
                                 sender_name=current_user.name,
-                                event_name=event.name,
-                                joining_code=event.unique_code,
+                                event_name=event['name'],
+                                joining_code=event['unique_code'],
                                 dashboard_url=dashboard_url)
     
     sent = send_notification_email(recipient_email, subject, body_html)
@@ -567,44 +572,57 @@ def share_event_code(event_id):
 #  MEMBER MANAGEMENT (Admin only)
 # ─────────────────────────────────────────────
 
-@app.route('/event/<int:event_id>/approve/<int:member_id>', methods=['POST'])
+@app.route('/event/<event_id>/approve/<member_id>', methods=['POST'])
 @login_required
 def approve_member(event_id, member_id):
     if not is_admin(event_id, current_user.id):
         return jsonify({'error': 'Unauthorized'}), 403
-    member = EventMember.query.get_or_404(member_id)
-    member.status = 'approved'
-    db.session.commit()
+        
+    try:
+        member = db.event_members.find_one({"_id": ObjectId(member_id)})
+        event = db.events.find_one({"_id": ObjectId(event_id)})
+        u = db.users.find_one({"_id": member["user_id"]})
+    except Exception:
+        return jsonify({'error': 'Not found'}), 404
+        
+    db.event_members.update_one({"_id": ObjectId(member_id)}, {"$set": {"status": "approved"}})
     
     # Send Join Request Approved Email
-    send_notification_email(member.user.email, f"Join Request Approved: {member.event.name}", 
-                           render_template('emails/join_request_approved.html', 
-                                          user_name=member.user.name, 
-                                          event_name=member.event.name,
-                                          dashboard_url=url_for('event_dashboard', event_id=member.event_id, _external=True)))
+    if u and event:
+        send_notification_email(u['email'], f"Join Request Approved: {event['name']}", 
+                               render_template('emails/join_request_approved.html', 
+                                              user_name=u['name'], 
+                                              event_name=event['name'],
+                                              dashboard_url=url_for('event_dashboard', event_id=str(event["_id"]), _external=True)))
                                           
     return jsonify({'success': True})
 
-@app.route('/event/<int:event_id>/reject/<int:member_id>', methods=['POST'])
+@app.route('/event/<event_id>/reject/<member_id>', methods=['POST'])
 @login_required
 def reject_member(event_id, member_id):
     if not is_admin(event_id, current_user.id):
         return jsonify({'error': 'Unauthorized'}), 403
-    member = EventMember.query.get_or_404(member_id)
+        
+    try:
+        member = db.event_members.find_one({"_id": ObjectId(member_id)})
+        event = db.events.find_one({"_id": ObjectId(event_id)})
+        u = db.users.find_one({"_id": member["user_id"]})
+    except Exception:
+        return jsonify({'error': 'Not found'}), 404
     
     # Send Rejection Email before deleting
-    send_notification_email(member.user.email, f"Join Request Declined: {member.event.name}",
-                           render_template('emails/join_request_rejected.html',
-                                          user_name=member.user.name,
-                                          event_name=member.event.name))
+    if u and event:
+        send_notification_email(u['email'], f"Join Request Declined: {event['name']}",
+                               render_template('emails/join_request_rejected.html',
+                                              user_name=u['name'],
+                                              event_name=event['name']))
                                           
     # Delete the record to allow new join requests in the future
-    db.session.delete(member)
-    db.session.commit()
+    db.event_members.delete_one({"_id": ObjectId(member_id)})
                                           
     return jsonify({'success': True})
 
-@app.route('/event/<int:event_id>/set-role/<int:member_id>', methods=['POST'])
+@app.route('/event/<event_id>/set-role/<member_id>', methods=['POST'])
 @login_required
 def set_role(event_id, member_id):
     if not is_admin(event_id, current_user.id):
@@ -613,9 +631,12 @@ def set_role(event_id, member_id):
     role = data.get('role')
     if role not in ('admin', 'manager', 'member'):
         return jsonify({'error': 'Invalid role'}), 400
-    member = EventMember.query.get_or_404(member_id)
-    member.role = role
-    db.session.commit()
+        
+    try:
+        db.event_members.update_one({"_id": ObjectId(member_id)}, {"$set": {"role": role}})
+    except Exception:
+        return jsonify({'error': 'Not found'}), 404
+        
     return jsonify({'success': True})
 
 
@@ -623,21 +644,32 @@ def set_role(event_id, member_id):
 #  GUEST MANAGEMENT
 # ─────────────────────────────────────────────
 
-@app.route('/event/<int:event_id>/guests')
+@app.route('/event/<event_id>/guests')
 @login_required
 def guests(event_id):
-    event = Event.query.get_or_404(event_id)
+    try:
+        event = db.events.find_one({"_id": ObjectId(event_id)})
+    except Exception:
+        event = None
+    if not event:
+        flash('Event not found.', 'error')
+        return redirect(url_for('dashboard'))
+    event['id'] = str(event['_id'])
+        
     member = get_member(event_id, current_user.id)
-    if not member or member.status != 'approved':
+    if not member or member.get('status') != 'approved':
         flash('Access denied.', 'error')
         return redirect(url_for('dashboard'))
-    # Only show primary guests (those without a parent) in the main list
-    guest_list = Guest.query.filter_by(event_id=event_id, parent_id=None).all()
-    # Stats should count EVERYONE
-    total_guests = db.session.query(db.func.count(Guest.id)).filter(Guest.event_id == event_id).scalar() or 0
-    total_individuals = Guest.query.filter_by(event_id=event_id, is_family=False).count()
-    # Families count is still the number of specific family-head entries
-    total_families = Guest.query.filter_by(event_id=event_id, is_family=True, parent_id=None).count()
+        
+    guest_list_cursor = db.guests.find({"event_id": ObjectId(event_id), "parent_id": None})
+    guest_list = []
+    for g in guest_list_cursor:
+        g['id'] = str(g['_id'])
+        guest_list.append(g)
+        
+    total_guests = db.guests.count_documents({"event_id": ObjectId(event_id)})
+    total_individuals = db.guests.count_documents({"event_id": ObjectId(event_id), "is_family": False})
+    total_families = db.guests.count_documents({"event_id": ObjectId(event_id), "is_family": True, "parent_id": None})
     
     return render_template('guests.html', event=event, guests=guest_list,
                            total_individuals=total_individuals,
@@ -686,107 +718,131 @@ def add_guest(event_id):
     db.session.commit()
     return jsonify({'success': True, 'guest': guest_to_dict(primary_guest)})
 
-@app.route('/event/<int:event_id>/guests/<int:guest_id>/update', methods=['POST'])
+@app.route('/event/<event_id>/guests/<guest_id>/update', methods=['POST'])
 @login_required
 def update_guest(event_id, guest_id):
-    guest = Guest.query.get_or_404(guest_id)
-    if not is_admin_or_manager(event_id, current_user.id) and guest.added_by != current_user.id:
+    try:
+        guest = db.guests.find_one({"_id": ObjectId(guest_id)})
+    except Exception:
+        return jsonify({'error': 'Guest not found'}), 404
+        
+    if not guest:
+        return jsonify({'error': 'Guest not found'}), 404
+        
+    if not is_admin_or_manager(event_id, current_user.id) and str(guest.get('added_by')) != str(current_user.id):
         return jsonify({'error': 'Unauthorized. You can only edit guests you added personally.'}), 403
     
     data = request.get_json()
+    update = {}
     
-    if 'name' in data:
-        guest.name = data['name'].strip()
-    
-    if 'coming_status' in data:
-        guest.coming_status = data['coming_status']
-    
-    if 'travel_mode' in data:
-        guest.travel_mode = data['travel_mode']
-    
-    if 'ticket_status' in data:
-        guest.ticket_status = data['ticket_status']
-    
-    if 'food_preference' in data:
-        guest.food_preference = data['food_preference']
-
+    for field in ['name', 'coming_status', 'travel_mode', 'ticket_status', 'food_preference']:
+        if field in data:
+            if field == 'name':
+                update[field] = data[field].strip()
+            else:
+                update[field] = data[field]
+                
     # Handle Family Syncing
-    if guest.is_family and 'family_members' in data and guest.parent_id is None:
-        old_members = json.loads(guest.family_members or '[]')
+    if guest.get('is_family') and 'family_members' in data and not guest.get('parent_id'):
         new_members = [m.strip() for m in data['family_members'] if m.strip()]
-        guest.family_members = json.dumps(new_members)
+        update['family_members'] = json.dumps(new_members)
         
         # Sync children records
-        existing_children = {c.name.strip(): c for c in guest.children}
+        existing_children_cursor = db.guests.find({"parent_id": ObjectId(guest_id)})
+        existing_children = {c['name'].strip(): c for c in existing_children_cursor}
         
-        # Add or keep
-        current_child_names = set()
+        current_child_names = set(new_members)
+        
         for m_name in new_members:
-            current_child_names.add(m_name)
             if m_name not in existing_children:
-                # Add new child
-                new_child = Guest(event_id=event_id, name=m_name, is_family=True,
-                                  added_by=current_user.id, parent_id=guest.id,
-                                  coming_status=guest.coming_status,
-                                  travel_mode=guest.travel_mode,
-                                  ticket_status=guest.ticket_status,
-                                  food_preference=guest.food_preference)
-                db.session.add(new_child)
+                db.guests.insert_one({
+                    "event_id": ObjectId(event_id),
+                    "name": m_name,
+                    "is_family": True,
+                    "family_members": "[]",
+                    "added_by": ObjectId(current_user.id),
+                    "parent_id": ObjectId(guest_id),
+                    "coming_status": update.get('coming_status', guest.get('coming_status', '')),
+                    "travel_mode": update.get('travel_mode', guest.get('travel_mode', '')),
+                    "ticket_status": update.get('ticket_status', guest.get('ticket_status', '')),
+                    "food_preference": update.get('food_preference', guest.get('food_preference', '')),
+                    "created_at": datetime.utcnow()
+                })
         
-        # Remove those not in new list
         for name, child in existing_children.items():
             if name not in current_child_names:
-                db.session.delete(child)
+                db.guests.delete_one({"_id": child["_id"]})
+                db.room_guests.delete_many({"guest_id": child["_id"]})
 
-    db.session.commit()
+    if update:
+        db.guests.update_one({"_id": ObjectId(guest_id)}, {"$set": update})
+        guest.update(update)
 
     # If this is a parent, cascade certain updates to children
-    if guest.parent_id is None:
+    if not guest.get('parent_id'):
         child_updates = {}
-        if 'coming_status' in data: child_updates['coming_status'] = data['coming_status']
-        if 'travel_mode' in data: child_updates['travel_mode'] = data['travel_mode']
-        if 'ticket_status' in data: child_updates['ticket_status'] = data['ticket_status']
-        if 'food_preference' in data: child_updates['food_preference'] = data['food_preference']
-        
+        for field in ['coming_status', 'travel_mode', 'ticket_status', 'food_preference']:
+            if field in data:
+                child_updates[field] = data[field]
+                
         if child_updates:
-            Guest.query.filter_by(parent_id=guest.id).update(child_updates)
-            db.session.commit()
+            db.guests.update_many({"parent_id": ObjectId(guest_id)}, {"$set": child_updates})
 
     return jsonify({'success': True, 'guest': guest_to_dict(guest)})
 
-@app.route('/event/<int:event_id>/guests/<int:guest_id>/delete', methods=['POST'])
+@app.route('/event/<event_id>/guests/<guest_id>/delete', methods=['POST'])
 @login_required
 def delete_guest(event_id, guest_id):
-    guest = Guest.query.get_or_404(guest_id)
-    if not is_admin_or_manager(event_id, current_user.id) and guest.added_by != current_user.id:
+    try:
+        guest = db.guests.find_one({"_id": ObjectId(guest_id)})
+    except Exception:
+        return jsonify({'error': 'Guest not found'}), 404
+        
+    if not guest:
+        return jsonify({'error': 'Guest not found'}), 404
+        
+    if not is_admin_or_manager(event_id, current_user.id) and str(guest.get('added_by')) != str(current_user.id):
         return jsonify({'error': 'Unauthorized. You can only delete guests you added personally.'}), 403
-    RoomGuest.query.filter_by(guest_id=guest_id).delete()
-    db.session.delete(guest)
-    db.session.commit()
+        
+    db.room_guests.delete_many({"guest_id": ObjectId(guest_id)})
+    db.guests.delete_one({"_id": ObjectId(guest_id)})
     return jsonify({'success': True})
 
-@app.route('/event/<int:event_id>/guests/list')
+@app.route('/event/<event_id>/guests/list')
 @login_required
 def get_guests(event_id):
     member = get_member(event_id, current_user.id)
-    if not member or member.status != 'approved':
+    if not member or member.get('status') != 'approved':
         return jsonify({'error': 'Unauthorized'}), 403
-    guests = Guest.query.filter_by(event_id=event_id).all()
+    guests = list(db.guests.find({"event_id": ObjectId(event_id)}))
     return jsonify([guest_to_dict(g) for g in guests])
 
 def guest_to_dict(g):
+    parent_name = None
+    if g.get('parent_id'):
+        parent = db.guests.find_one({"_id": g['parent_id']})
+        if parent:
+            parent_name = parent.get('name')
+            
+    # Handle created_at carefully as it might be a string or datetime depending on older records
+    created_at = g.get('created_at')
+    if isinstance(created_at, datetime):
+        created_at_str = created_at.strftime('%Y-%m-%d')
+    else:
+        created_at_str = str(created_at)
+
     return {
-        'id': g.id,
-        'name': g.name,
-        'is_family': g.is_family,
-        'family_members': json.loads(g.family_members or '[]'),
-        'coming_status': g.coming_status,
-        'travel_mode': g.travel_mode,
-        'ticket_status': g.ticket_status,
-        'food_preference': g.food_preference,
-        'parent_id': g.parent_id,
-        'parent_name': g.parent.name if g.parent else None,
-        'created_at': g.created_at.strftime('%Y-%m-%d')
+        'id': str(g.get('_id')),
+        'name': g.get('name'),
+        'is_family': g.get('is_family'),
+        'family_members': json.loads(g.get('family_members') or '[]'),
+        'coming_status': g.get('coming_status'),
+        'travel_mode': g.get('travel_mode'),
+        'ticket_status': g.get('ticket_status'),
+        'food_preference': g.get('food_preference'),
+        'parent_id': str(g.get('parent_id')) if g.get('parent_id') else None,
+        'parent_name': parent_name,
+        'created_at': created_at_str
     }
 
 
@@ -794,148 +850,175 @@ def guest_to_dict(g):
 #  STAY MANAGEMENT
 # ─────────────────────────────────────────────
 
-@app.route('/event/<int:event_id>/stay')
+@app.route('/event/<event_id>/stay')
 @login_required
 def stay(event_id):
-    event = Event.query.get_or_404(event_id)
+    try:
+        event = db.events.find_one({"_id": ObjectId(event_id)})
+    except Exception:
+        return redirect(url_for('dashboard'))
+    if not event:
+        flash('Event not found.', 'error')
+        return redirect(url_for('dashboard'))
+    event['id'] = str(event['_id'])
+        
     member = get_member(event_id, current_user.id)
-    if not member or member.status != 'approved':
+    if not member or member.get('status') != 'approved':
         flash('Access denied.', 'error')
         return redirect(url_for('dashboard'))
-    accommodations = Accommodation.query.filter_by(event_id=event_id).all()
+        
+    accommodations = list(db.accommodations.find({"event_id": ObjectId(event_id)}))
     return render_template('stay.html', event=event, accommodations=accommodations,
                            member=member,
                            is_admin=is_admin(event_id, current_user.id),
                            is_admin_or_manager=is_admin_or_manager(event_id, current_user.id))
 
-@app.route('/event/<int:event_id>/stay/add-place', methods=['POST'])
+@app.route('/event/<event_id>/stay/add-place', methods=['POST'])
 @login_required
 def add_place(event_id):
     if not is_admin_or_manager(event_id, current_user.id):
         return jsonify({'error': 'Unauthorized. Only admins and managers can add accommodations.'}), 403
     data = request.get_json()
-    place = Accommodation(event_id=event_id,
-                          place_name=data.get('place_name', '').strip(),
-                          place_type=data.get('place_type', 'Hotel'))
-    db.session.add(place)
-    db.session.commit()
-    return jsonify({'success': True, 'id': place.id, 'name': place.place_name, 'type': place.place_type})
+    place = {
+        "event_id": ObjectId(event_id),
+        "place_name": data.get('place_name', '').strip(),
+        "place_type": data.get('place_type', 'Hotel')
+    }
+    res = db.accommodations.insert_one(place)
+    return jsonify({'success': True, 'id': str(res.inserted_id), 'name': place['place_name'], 'type': place['place_type']})
 
-@app.route('/event/<int:event_id>/stay/add-room', methods=['POST'])
+@app.route('/event/<event_id>/stay/add-room', methods=['POST'])
 @login_required
 def add_room(event_id):
     if not is_admin_or_manager(event_id, current_user.id):
         return jsonify({'error': 'Unauthorized. Only admins and managers can add rooms.'}), 403
     data = request.get_json()
-    room = Room(accommodation_id=data.get('accommodation_id'),
-                room_number=data.get('room_number', '').strip())
-    db.session.add(room)
-    db.session.commit()
-    return jsonify({'success': True, 'id': room.id, 'room_number': room.room_number})
+    room = {
+        "accommodation_id": ObjectId(data.get('accommodation_id')),
+        "room_number": data.get('room_number', '').strip()
+    }
+    res = db.rooms.insert_one(room)
+    return jsonify({'success': True, 'id': str(res.inserted_id), 'room_number': room['room_number']})
 
-@app.route('/event/<int:event_id>/stay/assign-guest', methods=['POST'])
+@app.route('/event/<event_id>/stay/assign-guest', methods=['POST'])
 @login_required
 def assign_guest_to_room(event_id):
     member = get_member(event_id, current_user.id)
-    if not member or member.status != 'approved':
+    if not member or member.get('status') != 'approved':
         return jsonify({'error': 'Unauthorized'}), 403
     data = request.get_json()
-    room_id = data.get('room_id')
-    guest_id = data.get('guest_id')
+    room_id = ObjectId(data.get('room_id'))
+    guest_id = ObjectId(data.get('guest_id'))
     
     # Remove existing assignment for this guest
-    RoomGuest.query.filter_by(guest_id=guest_id).delete()
-    rg = RoomGuest(room_id=room_id, guest_id=guest_id)
-    db.session.add(rg)
+    db.room_guests.delete_many({"guest_id": guest_id})
+    db.room_guests.insert_one({"room_id": room_id, "guest_id": guest_id})
     
     # Auto-assign family members if this is a family head
-    guest = Guest.query.get(guest_id)
-    if guest and guest.is_family and not guest.parent_id:
-        children = Guest.query.filter_by(parent_id=guest.id).all()
-        for child in children:
-            # Remove child from any other rooms first
-            RoomGuest.query.filter_by(guest_id=child.id).delete()
-            # Assign to the same room
-            child_rg = RoomGuest(room_id=room_id, guest_id=child.id)
-            db.session.add(child_rg)
+    guest = db.guests.find_one({"_id": guest_id})
+    if guest and guest.get('is_family') and not guest.get('parent_id'):
+        children = list(db.guests.find({"parent_id": guest_id}))
+        if children:
+            child_ids = [c["_id"] for c in children]
+            db.room_guests.delete_many({"guest_id": {"$in": child_ids}})
+            new_rgs = [{"room_id": room_id, "guest_id": cid} for cid in child_ids]
+            db.room_guests.insert_many(new_rgs)
             
-    db.session.commit()
     return jsonify({'success': True})
 
-@app.route('/event/<int:event_id>/stay/remove-guest', methods=['POST'])
+@app.route('/event/<event_id>/stay/remove-guest', methods=['POST'])
 @login_required
 def remove_guest_from_room(event_id):
     member = get_member(event_id, current_user.id)
-    if not member or member.status != 'approved':
+    if not member or member.get('status') != 'approved':
         return jsonify({'error': 'Unauthorized'}), 403
     
     data = request.get_json()
-    guest_id = data.get('guest_id')
-    room_id = data.get('room_id')
+    guest_id = ObjectId(data.get('guest_id'))
+    room_id = ObjectId(data.get('room_id'))
     
-    guest = Guest.query.get_or_404(guest_id)
+    guest = db.guests.find_one({"_id": guest_id})
+    if not guest:
+        return jsonify({'error': 'Not found'}), 404
+        
     # Permission check: admin/manager OR guest owner
-    if not is_admin_or_manager(event_id, current_user.id) and guest.added_by != current_user.id:
+    if not is_admin_or_manager(event_id, current_user.id) and str(guest.get('added_by')) != str(current_user.id):
         return jsonify({'error': 'Unauthorized. You can only remove guests you added personally.'}), 403
         
-    RoomGuest.query.filter_by(guest_id=guest_id, room_id=room_id).delete()
-    db.session.commit()
+    db.room_guests.delete_many({"guest_id": guest_id, "room_id": room_id})
     return jsonify({'success': True})
 
-@app.route('/event/<int:event_id>/stay/data')
+@app.route('/event/<event_id>/stay/data')
 @login_required
 def stay_data(event_id):
     member = get_member(event_id, current_user.id)
-    if not member or member.status != 'approved':
+    if not member or member.get('status') != 'approved':
         return jsonify({'error': 'Unauthorized'}), 403
     
-    # Eager load rooms, guests and their assignments to optimize performance
-    accommodations = Accommodation.query.options(
-        joinedload(Accommodation.rooms).joinedload(Room.room_guests).joinedload(RoomGuest.guest)
-    ).filter_by(event_id=event_id).all()
+    accs = list(db.accommodations.find({"event_id": ObjectId(event_id)}))
     result = []
-    for acc in accommodations:
+    
+    room_ids = []
+    for acc in accs:
         rooms_data = []
-        for room in acc.rooms:
+        rooms = list(db.rooms.find({"accommodation_id": acc["_id"]}))
+        for room in rooms:
+            room_ids.append(room["_id"])
             assigned = []
-            for rg in room.room_guests:
-                g = rg.guest
-                assigned.append({
-                    'id': g.id, 
-                    'name': g.name, 
-                    'is_family': g.is_family,
-                    'added_by': g.added_by
-                })
-            rooms_data.append({'id': room.id, 'number': room.room_number, 'guests': assigned})
-        result.append({'id': acc.id, 'name': acc.place_name, 'type': acc.place_type, 'rooms': rooms_data})
+            rgs = list(db.room_guests.find({"room_id": room["_id"]}))
+            for rg in rgs:
+                g = db.guests.find_one({"_id": rg["guest_id"]})
+                if g:
+                    assigned.append({
+                        'id': str(g['_id']), 
+                        'name': g.get('name'), 
+                        'is_family': g.get('is_family'),
+                        'added_by': str(g.get('added_by'))
+                    })
+            rooms_data.append({'id': str(room['_id']), 'number': room.get('room_number'), 'guests': assigned})
+        result.append({'id': str(acc['_id']), 'name': acc.get('place_name'), 'type': acc.get('place_type'), 'rooms': rooms_data})
+        
     # Only show guests NOT already assigned to a room
-    assigned_guest_ids = [rg.guest_id for rg in RoomGuest.query.join(Room).join(Accommodation).filter(Accommodation.event_id == event_id).all()]
-    guests = Guest.query.filter(Guest.event_id == event_id, ~Guest.id.in_(assigned_guest_ids)).all()
-    guest_list = [{'id': g.id, 'name': g.name, 'is_family': g.is_family, 'parent_name': g.parent.name if g.parent else None} for g in guests]
+    assigned_guest_ids = [rg["guest_id"] for rg in db.room_guests.find({"room_id": {"$in": room_ids}})]
+    guests = list(db.guests.find({"event_id": ObjectId(event_id), "_id": {"$nin": assigned_guest_ids}}))
+    
+    guest_list = []
+    for g in guests:
+        parent_name = None
+        if g.get('parent_id'):
+            p = db.guests.find_one({"_id": g['parent_id']})
+            parent_name = p.get('name') if p else None
+        guest_list.append({
+            'id': str(g['_id']), 
+            'name': g.get('name'), 
+            'is_family': g.get('is_family'), 
+            'parent_name': parent_name
+        })
+        
     return jsonify({'accommodations': result, 'guests': guest_list})
 
-@app.route('/event/<int:event_id>/stay/delete-place/<int:place_id>', methods=['POST'])
+@app.route('/event/<event_id>/stay/delete-place/<place_id>', methods=['POST'])
 @login_required
 def delete_place(event_id, place_id):
     if not is_admin_or_manager(event_id, current_user.id):
         return jsonify({'error': 'Unauthorized'}), 403
-    acc = Accommodation.query.get_or_404(place_id)
-    for room in acc.rooms:
-        RoomGuest.query.filter_by(room_id=room.id).delete()
-        db.session.delete(room)
-    db.session.delete(acc)
-    db.session.commit()
+        
+    rooms = list(db.rooms.find({"accommodation_id": ObjectId(place_id)}))
+    for room in rooms:
+        db.room_guests.delete_many({"room_id": room["_id"]})
+        db.rooms.delete_one({"_id": room["_id"]})
+        
+    db.accommodations.delete_one({"_id": ObjectId(place_id)})
     return jsonify({'success': True})
 
-@app.route('/event/<int:event_id>/stay/delete-room/<int:room_id>', methods=['POST'])
+@app.route('/event/<event_id>/stay/delete-room/<room_id>', methods=['POST'])
 @login_required
 def delete_room(event_id, room_id):
     if not is_admin_or_manager(event_id, current_user.id):
         return jsonify({'error': 'Unauthorized'}), 403
-    room = Room.query.get_or_404(room_id)
-    RoomGuest.query.filter_by(room_id=room_id).delete()
-    db.session.delete(room)
-    db.session.commit()
+        
+    db.room_guests.delete_many({"room_id": ObjectId(room_id)})
+    db.rooms.delete_one({"_id": ObjectId(room_id)})
     return jsonify({'success': True})
 
 
@@ -943,18 +1026,33 @@ def delete_room(event_id, room_id):
 #  TRAVEL MANAGEMENT
 # ─────────────────────────────────────────────
 
-@app.route('/event/<int:event_id>/travel')
+@app.route('/event/<event_id>/travel')
 @login_required
 def travel(event_id):
-    event = Event.query.get_or_404(event_id)
+    try:
+        event = db.events.find_one({"_id": ObjectId(event_id)})
+    except Exception:
+        event = None
+    if not event:
+        flash('Event not found.', 'error')
+        return redirect(url_for('dashboard'))
+    event['id'] = str(event['_id'])
+        
     member = get_member(event_id, current_user.id)
-    if not member or member.status != 'approved':
+    if not member or member.get('status') != 'approved':
         flash('Access denied.', 'error')
         return redirect(url_for('dashboard'))
+        
     if not is_admin(event_id, current_user.id):
         flash('Only admins can manage travel.', 'error')
         return redirect(url_for('event_dashboard', event_id=event_id))
-    guests = Guest.query.filter_by(event_id=event_id).all()
+        
+    guests_cursor = db.guests.find({"event_id": ObjectId(event_id)})
+    guests = []
+    for g in guests_cursor:
+        g['id'] = str(g['_id'])
+        guests.append(g)
+        
     return render_template('travel.html', event=event, guests=guests,
                            member=member,
                            is_admin=True,
@@ -965,31 +1063,51 @@ def travel(event_id):
 #  NOTIFICATIONS
 # ─────────────────────────────────────────────
 
-@app.route('/event/<int:event_id>/notifications')
+@app.route('/event/<event_id>/notifications')
 @login_required
 def notifications(event_id):
-    event = Event.query.get_or_404(event_id)
+    try:
+        event = db.events.find_one({"_id": ObjectId(event_id)})
+    except Exception:
+        event = None
+    if not event:
+        flash('Event not found.', 'error')
+        return redirect(url_for('dashboard'))
+    event['id'] = str(event['_id'])
+        
     member = get_member(event_id, current_user.id)
-    if not member or member.status != 'approved':
+    if not member or member.get('status') != 'approved':
         flash('Access denied.', 'error')
         return redirect(url_for('dashboard'))
     
-    # Get direct notifications or broadcasts (receiver_id is NULL)
-    notifs = Notification.query.filter(
-        Notification.event_id == event_id,
-        (Notification.receiver_id == current_user.id) | (Notification.receiver_id == None)
-    ).order_by(Notification.created_at.desc()).all()
+    # Get direct notifications or broadcasts (receiver_id is None)
+    notifs_cursor = db.notifications.find({
+        "event_id": ObjectId(event_id),
+        "$or": [
+            {"receiver_id": ObjectId(current_user.id)},
+            {"receiver_id": None}
+        ]
+    }).sort("created_at", -1)
+    
+    notifs = []
+    for n in notifs_cursor:
+        sender = db.users.find_one({"_id": n["sender_id"]})
+        if sender:
+            n['sender_name'] = sender.get('name')
+            n['sender_avatar'] = sender.get('avatar')
+        n['id'] = str(n['_id'])
+        notifs.append(n)
     
     return render_template('notifications.html', event=event, member=member,
                            notifications=notifs,
                            is_admin=is_admin(event_id, current_user.id),
                            is_admin_or_manager=is_admin_or_manager(event_id, current_user.id))
 
-@app.route('/event/<int:event_id>/notifications/send', methods=['POST'])
+@app.route('/event/<event_id>/notifications/send', methods=['POST'])
 @login_required
 def send_notification(event_id):
     member = get_member(event_id, current_user.id)
-    if not member or member.status != 'approved':
+    if not member or member.get('status') != 'approved':
         return jsonify({'error': 'Unauthorized'}), 403
     
     data = request.get_json()
@@ -1000,64 +1118,95 @@ def send_notification(event_id):
         return jsonify({'error': 'Message cannot be empty'}), 400
 
     sent_emails = 0
+    event = db.events.find_one({"_id": ObjectId(event_id)})
+    if not event:
+        return jsonify({'error': 'Event not found'}), 404
+    
+    curr_user_dict = {"name": current_user.name, "email": current_user.email}
     
     if receiver_id == 'all':
-        if member.role != 'admin':
+        if member.get('role') != 'admin':
             return jsonify({'error': 'Unauthorized'}), 403
         
-        event = Event.query.get(event_id)
-        # Eager load user data for all members to optimize email loop
-        event_members = EventMember.query.options(joinedload(EventMember.user)) \
-            .filter_by(event_id=event_id, status='approved').all()
+        event_members = list(db.event_members.find({"event_id": ObjectId(event_id), "status": 'approved'}))
             
         for em in event_members:
-            if em.user_id != current_user.id:
-                notif = Notification(event_id=event_id, sender_id=current_user.id, 
-                                     receiver_id=em.user_id, message=message)
-                db.session.add(notif)
-                email_sent = send_notification_email(em.user.email, f"New Notification: {event.name}", 
-                                        render_template('emails/notification_email.html', 
-                                                        user=em.user, event=event, message=message, sender=current_user))
-                if email_sent: sent_emails += 1
+            if str(em["user_id"]) != str(current_user.id):
+                u = db.users.find_one({"_id": em["user_id"]})
+                if u:
+                    notif = {
+                        "event_id": ObjectId(event_id), 
+                        "sender_id": ObjectId(current_user.id), 
+                        "receiver_id": em["user_id"], 
+                        "message": message,
+                        "is_read": False,
+                        "created_at": datetime.utcnow()
+                    }
+                    db.notifications.insert_one(notif)
+                    email_sent = send_notification_email(u['email'], f"New Notification: {event['name']}", 
+                                            render_template('emails/notification_email.html', 
+                                                            user=u, event=event, message=message, sender=curr_user_dict))
+                    if email_sent: sent_emails += 1
     
     elif receiver_id == 'admins':
-        # Members/Managers sending to all admins
-        admins = EventMember.query.filter_by(event_id=event_id, role='admin', status='approved').all()
+        admins = list(db.event_members.find({"event_id": ObjectId(event_id), "role": 'admin', "status": 'approved'}))
         for adm in admins:
-            if adm.user_id != current_user.id:
-                notif = Notification(event_id=event_id, sender_id=current_user.id, 
-                                     receiver_id=adm.user_id, message=message)
-                db.session.add(notif)
-                email_sent = send_notification_email(adm.user.email, f"Admin Alert: {Event.query.get(event_id).name}", 
-                                        render_template('emails/notification_email.html', 
-                                                        user=adm.user, event=adm.event, message=message, sender=current_user))
-                if email_sent: sent_emails += 1
+            if str(adm["user_id"]) != str(current_user.id):
+                u = db.users.find_one({"_id": adm["user_id"]})
+                if u:
+                    notif = {
+                        "event_id": ObjectId(event_id), 
+                        "sender_id": ObjectId(current_user.id), 
+                        "receiver_id": adm["user_id"], 
+                        "message": message,
+                        "is_read": False,
+                        "created_at": datetime.utcnow()
+                    }
+                    db.notifications.insert_one(notif)
+                    email_sent = send_notification_email(u['email'], f"Admin Alert: {event['name']}", 
+                                            render_template('emails/notification_email.html', 
+                                                            user=u, event=event, message=message, sender=curr_user_dict))
+                    if email_sent: sent_emails += 1
     
     else:
         # Single recipient
-        target_user = User.query.get_or_404(receiver_id)
-        notif = Notification(event_id=event_id, sender_id=current_user.id, 
-                             receiver_id=target_user.id, message=message)
-        db.session.add(notif)
-        email_sent = send_notification_email(target_user.email, f"New Message from {current_user.name}", 
+        target_user = db.users.find_one({"_id": ObjectId(receiver_id)})
+        if not target_user:
+            return jsonify({'error': 'User not found'}), 404
+            
+        notif = {
+            "event_id": ObjectId(event_id), 
+            "sender_id": ObjectId(current_user.id), 
+            "receiver_id": target_user["_id"], 
+            "message": message,
+            "is_read": False,
+            "created_at": datetime.utcnow()
+        }
+        db.notifications.insert_one(notif)
+        email_sent = send_notification_email(target_user['email'], f"New Message from {current_user.name}", 
                                 render_template('emails/notification_email.html', 
-                                                user=target_user, event=Event.query.get(event_id), message=message, sender=current_user))
+                                                user=target_user, event=event, message=message, sender=curr_user_dict))
         if email_sent: sent_emails += 1
 
-    db.session.commit()
     return jsonify({'success': True, 'emails_sent': sent_emails})
 
-@app.route('/event/<int:event_id>/notifications/mark-read', methods=['POST'])
+@app.route('/event/<event_id>/notifications/mark-read', methods=['POST'])
 @login_required
 def mark_notifications_read(event_id):
-    Notification.query.filter_by(event_id=event_id, receiver_id=current_user.id, is_read=False).update({'is_read': True})
-    db.session.commit()
+    db.notifications.update_many(
+        {"event_id": ObjectId(event_id), "receiver_id": ObjectId(current_user.id), "is_read": False},
+        {"$set": {"is_read": True}}
+    )
     return jsonify({'success': True})
 
-@app.route('/event/<int:event_id>/notifications/unread-count')
+@app.route('/event/<event_id>/notifications/unread-count')
 @login_required
 def unread_count(event_id):
-    count = Notification.query.filter_by(event_id=event_id, receiver_id=current_user.id, is_read=False).count()
+    count = db.notifications.count_documents({
+        "event_id": ObjectId(event_id), 
+        "receiver_id": ObjectId(current_user.id), 
+        "is_read": False
+    })
     return jsonify({'count': count})
 
 
