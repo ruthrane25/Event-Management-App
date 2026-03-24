@@ -236,64 +236,6 @@
         </div>
     </div>
 </div>
-
-<!-- Settings Modal -->
-<div class="modal-overlay hidden" id="settingsModal">
-    <div class="modal">
-        <div class="modal-header">
-            <h3><i class="fas fa-cog"></i> Event Settings</h3>
-            <button class="modal-close" onclick="closeSettingsModal()"><i class="fas fa-times"></i></button>
-        </div>
-        <div class="modal-body">
-            <div class="form-group">
-                <label class="form-label">Theme Color</label>
-                <input type="color" class="form-input" id="settingsThemeColor" value="{{ event.theme_color or '#6366f1' }}" style="height: 44px; padding: 4px; cursor: pointer;">
-            </div>
-            <p style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 5px;">
-                Choose a primary color. The entire application will update to match your event's theme instantly.
-            </p>
-        </div>
-        <div class="modal-footer">
-            <button class="btn btn-ghost" onclick="closeSettingsModal()">Cancel</button>
-            <button class="btn btn-primary" id="saveSettingsBtn" onclick="submitSettings()">
-                <i class="fas fa-save"></i> Save Settings
-            </button>
-        </div>
-    </div>
-</div>
-
-<script>
-    function openSettingsModal() { document.getElementById('settingsModal').classList.remove('hidden'); }
-    function closeSettingsModal() { document.getElementById('settingsModal').classList.add('hidden'); }
-    
-    async function submitSettings() {
-        const color = document.getElementById('settingsThemeColor').value;
-        const btn = document.getElementById('saveSettingsBtn');
-        const orig = btn.innerHTML;
-        btn.disabled = true;
-        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
-        
-        try {
-            const res = await fetch(`/event/{{ event.id }}/update-settings`, {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ theme_color: color })
-            });
-            const data = await res.json();
-            if(data.success) {
-                showToast('Settings updated!', 'success');
-                setTimeout(() => location.reload(), 500);
-            } else {
-                showToast(data.error || 'Failed to update', 'error');
-            }
-        } catch(e) { 
-            showToast('Error saving settings', 'error'); 
-        } finally {
-            btn.disabled = false;
-            btn.innerHTML = orig;
-        }
-    }
-</script>
 {% endblock %}
 
 {% block content %}
@@ -313,9 +255,6 @@
                     <i class="fas fa-paper-plane"></i> Share via Email
                 </button>
                 {% if is_admin %}
-                <button class="share-btn" onclick="openSettingsModal()" style="color:var(--text-primary); border-color:var(--border)">
-                    <i class="fas fa-cog"></i> Settings
-                </button>
                 <button class="share-btn" onclick="sendReminders()" id="remindersBtn" style="color:var(--primary); border-color:var(--primary-soft)">
                     <i class="fas fa-bullhorn"></i> Blast Reminders
                 </button>

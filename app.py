@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session, Response
 from pymongo import MongoClient
 from bson.objectid import ObjectId
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
@@ -423,6 +423,43 @@ def google_callback():
 def logout():
     logout_user()
     return redirect(url_for('login'))
+
+
+# ─────────────────────────────────────────────
+#  USER PROFILE
+# ─────────────────────────────────────────────
+
+@app.route('/update-profile', methods=['POST'])
+@login_required
+def update_profile():
+    name = request.form.get('name', '').strip()
+    if name:
+        db.users.update_one({"_id": ObjectId(current_user.id)}, {"$set": {"name": name}})
+        flash('Profile updated successfully!', 'success')
+    return redirect(request.referrer or url_for('dashboard'))
+
+@app.route('/event/<event_id>/share-rsvp', methods=['POST'])
+@login_required
+def share_rsvp(event_id):
+    if not is_member(event_id, current_user.id):
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    data = request.get_json()
+    email = data.get('email', '').strip()
+    if not email:
+        return jsonify({'error': 'Email is required'}), 400
+        
+    event = db.events.find_one({"_id": ObjectId(event_id)})
+    
+    body_html = f"""
+    <h3>You're invited to {event['name']}!</h3>
+    <p>Please let us know if you can make it by filling out your RSVP form here:</p>
+    <a href="{url_for('public_rsvp', event_code=event['unique_code'], _external=True)}" style="display:inline-block; padding:10px 20px; background:#6366f1; color:#fff; text-decoration:none; border-radius:5px;">RSVP Now</a>
+    """
+    
+    if send_notification_email(email, f"RSVP Invitation: {event['name']}", body_html):
+        return jsonify({'success': True})
+    return jsonify({'error': 'Failed to send email'}), 500
 
 
 # ─────────────────────────────────────────────

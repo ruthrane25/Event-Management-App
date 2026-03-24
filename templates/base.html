@@ -59,16 +59,70 @@
       <i class="fas fa-plus-circle"></i> <span class="nav-text">New / Join</span>
     </a>
   </div>
-  <div class="nav-user">
+<style>
+.profile-dropdown {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 10px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: var(--shadow-lg);
+    width: 260px;
+    z-index: 1000;
+    overflow: hidden;
+}
+.dropdown-header { padding: 15px; border-bottom: 1px solid var(--border); text-align: center; }
+.dropdown-body { padding: 5px 0; }
+.dropdown-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 12px 20px;
+    color: var(--text-primary);
+    text-decoration: none;
+    cursor: pointer;
+    font-size: 0.95rem;
+    transition: background 0.2s;
+    background: transparent;
+    border: none;
+    width: 100%;
+    text-align: left;
+}
+.dropdown-item:hover { background: var(--bg-hover); }
+</style>
+  <div class="nav-user" style="position: relative;" onclick="toggleProfileDropdown(event)">
     {% if current_user.avatar %}
-    <img src="{{ current_user.avatar }}" alt="avatar" class="user-avatar bubble-hover"/>
+    <img src="{{ current_user.avatar }}" alt="avatar" class="user-avatar bubble-hover" style="cursor:pointer;"/>
     {% else %}
-    <div class="user-avatar-placeholder bubble-hover">{{ (current_user.name or "?")[0].upper() }}</div>
+    <div class="user-avatar-placeholder bubble-hover" style="cursor:pointer;">{{ (current_user.name or "?")[0].upper() }}</div>
     {% endif %}
-    <span class="user-name hide-mobile">{{ current_user.name }}</span>
-    <a href="{{ url_for('logout') }}" class="nav-link logout">
-      <i class="fas fa-sign-out-alt"></i>
-    </a>
+    <span class="user-name hide-mobile" style="cursor:pointer; user-select:none;">{{ current_user.name }} <i class="fas fa-chevron-down" style="font-size:0.8rem; margin-left:4px;"></i></span>
+    
+    <!-- Dropdown Menu -->
+    <div class="profile-dropdown hidden" id="profileDropdown" onclick="event.stopPropagation()">
+        <div class="dropdown-header">
+            <strong>{{ current_user.name }}</strong>
+            <div style="font-size: 0.8rem; color: var(--text-secondary);">{{ current_user.email }}</div>
+            <button class="btn btn-ghost btn-sm" style="width:100%; margin-top:10px;" onclick="openEditProfileModal()">
+                <i class="fas fa-user-edit"></i> Edit Profile
+            </button>
+        </div>
+        <div class="dropdown-body">
+            {% set eid = event.id if event and event.id else (request.view_args.get('event_id') if request.view_args else none) %}
+            {% if eid and event %}
+            <button class="dropdown-item" onclick="openShareRSVPModal()">
+                <i class="fas fa-envelope-open-text"></i> Share RSVP Link
+            </button>
+            <button class="dropdown-item" onclick="openSettingsModal()">
+                <i class="fas fa-palette"></i> Event Themes
+            </button>
+            <hr style="border: 0; border-top: 1px solid var(--border); margin: 5px 0;">
+            {% endif %}
+            <a href="{{ url_for('logout') }}" class="dropdown-item" style="color: var(--danger);">
+                <i class="fas fa-sign-out-alt"></i> Logout
+            </a>
+        </div>
+    </div>
   </div>
 </nav>
 
@@ -138,9 +192,189 @@
   {% endwith %}
 
   {% block content %}{% endblock %}
+  
+  <!-- Edit Profile Modal -->
+  <div class="modal-overlay hidden" id="editProfileModal">
+      <div class="modal">
+          <div class="modal-header">
+              <h3><i class="fas fa-user-edit"></i> Edit Profile</h3>
+              <button class="modal-close" onclick="closeEditProfileModal()"><i class="fas fa-times"></i></button>
+          </div>
+          <form action="{{ url_for('update_profile') }}" method="POST">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+              <div class="modal-body">
+                  <div class="form-group">
+                      <label class="form-label">Full Name</label>
+                      <input type="text" name="name" class="form-input" value="{{ current_user.name }}" required>
+                  </div>
+                  <div class="form-group">
+                      <label class="form-label">Email Address</label>
+                      <input type="email" class="form-input" value="{{ current_user.email }}" disabled style="background:var(--bg-hover); cursor:not-allowed;">
+                      <p style="font-size:0.8rem; color:var(--text-secondary); margin-top:5px;">Email cannot be changed.</p>
+                  </div>
+              </div>
+              <div class="modal-footer">
+                  <button type="button" class="btn btn-ghost" onclick="closeEditProfileModal()">Cancel</button>
+                  <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Save Changes</button>
+              </div>
+          </form>
+      </div>
+  </div>
+
+  {% set eid = event.id if event and event.id else (request.view_args.get('event_id') if request.view_args else none) %}
+  {% if eid and event %}
+  <!-- Share RSVP Modal -->
+  <div class="modal-overlay hidden" id="shareRSVPModal">
+      <div class="modal">
+          <div class="modal-header">
+              <h3><i class="fas fa-envelope-open-text"></i> Share RSVP Link</h3>
+              <button class="modal-close" onclick="closeShareRSVPModal()"><i class="fas fa-times"></i></button>
+          </div>
+          <div class="modal-body">
+              <div class="event-code-hero" style="margin-bottom: 20px; padding: 15px;">
+                  <span style="font-size:0.85rem; word-break: break-all;">{{ url_for('public_rsvp', event_code=event.unique_code, _external=True) }}</span>
+                  <button class="copy-btn" data-url="{{ url_for('public_rsvp', event_code=event.unique_code, _external=True) }}" onclick="copyCode(this.getAttribute('data-url'))" style="margin-top:10px; width:100%;">
+                      <i class="fas fa-copy"></i> Copy Link
+                  </button>
+              </div>
+              <p style="color:var(--text-secondary); font-size: 0.9rem; margin-bottom: 10px;">
+                  Or email the invitation directly:
+              </p>
+              <div class="form-group">
+                  <input type="email" class="form-input" id="rsvpRecipientEmail" placeholder="e.g. friend@example.com">
+              </div>
+          </div>
+          <div class="modal-footer">
+              <button class="btn btn-ghost" onclick="closeShareRSVPModal()">Cancel</button>
+              <button class="btn btn-primary" id="sendRSVPBtn" onclick="submitRSVPShare()">
+                  <i class="fas fa-paper-plane"></i> Send Invite
+              </button>
+          </div>
+      </div>
+  </div>
+
+  <!-- Settings Modal (Moved to Global Nav) -->
+  <div class="modal-overlay hidden" id="settingsModal">
+      <div class="modal">
+          <div class="modal-header">
+              <h3><i class="fas fa-palette"></i> Event Themes</h3>
+              <button class="modal-close" onclick="closeSettingsModal()"><i class="fas fa-times"></i></button>
+          </div>
+          <div class="modal-body">
+              <div class="form-group" style="display: flex; align-items: flex-end; gap: 10px;">
+                  <div style="flex: 1;">
+                      <label class="form-label">Primary Color</label>
+                      <input type="color" class="form-input" id="settingsThemeColor" value="{{ event.theme_color or '#6366f1' }}" style="height: 44px; padding: 4px; cursor: pointer;">
+                  </div>
+                  <button type="button" class="btn btn-ghost" onclick="resetTheme()" style="height: 44px; width: 44px; padding: 0; display: flex; align-items: center; justify-content: center;" title="Reset to Default">
+                      <i class="fas fa-undo"></i>
+                  </button>
+              </div>
+              <p style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 5px;">
+                  Choose a primary color. The entire application will update to match your event's theme instantly.
+              </p>
+          </div>
+          <div class="modal-footer">
+              <button class="btn btn-ghost" onclick="closeSettingsModal()">Cancel</button>
+              <button class="btn btn-primary" id="saveSettingsBtn" onclick="submitSettings()">
+                  <i class="fas fa-save"></i> Save Settings
+              </button>
+          </div>
+      </div>
+  </div>
+  {% endif %}
 </main>
 
 <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+<script>
+    function toggleProfileDropdown(e) {
+        e.stopPropagation();
+        document.getElementById('profileDropdown').classList.toggle('hidden');
+    }
+    document.addEventListener('click', function(e) {
+        const dd = document.getElementById('profileDropdown');
+        if (dd && !dd.classList.contains('hidden') && !e.target.closest('.nav-user')) {
+            dd.classList.add('hidden');
+        }
+    });
+
+    function openEditProfileModal() { document.getElementById('profileDropdown').classList.add('hidden'); document.getElementById('editProfileModal').classList.remove('hidden'); }
+    function closeEditProfileModal() { document.getElementById('editProfileModal').classList.add('hidden'); }
+
+    function openShareRSVPModal() { document.getElementById('profileDropdown').classList.add('hidden'); document.getElementById('shareRSVPModal').classList.remove('hidden'); }
+    function closeShareRSVPModal() { document.getElementById('shareRSVPModal').classList.add('hidden'); }
+
+    function openSettingsModal() { document.getElementById('profileDropdown').classList.add('hidden'); document.getElementById('settingsModal').classList.remove('hidden'); }
+    function closeSettingsModal() { document.getElementById('settingsModal').classList.add('hidden'); }
+</script>
+
+{% if eid and event %}
+<script>
+    async function submitRSVPShare() {
+        const email = document.getElementById('rsvpRecipientEmail').value;
+        if (!email) return showToast('Please enter an email', 'error');
+        const btn = document.getElementById('sendRSVPBtn');
+        const orig = btn.innerHTML;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending...';
+        btn.disabled = true;
+        
+        try {
+            const res = await fetch(`/event/{{ eid }}/share-rsvp`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ email: email })
+            });
+            const data = await res.json();
+            if(data.success) {
+                showToast('RSVP invitation sent!', 'success');
+                closeShareRSVPModal();
+                document.getElementById('rsvpRecipientEmail').value = '';
+            } else {
+                showToast(data.error || 'Failed to send', 'error');
+            }
+        } catch(e) {
+            showToast('Error sending email', 'error');
+        } finally {
+            btn.innerHTML = orig;
+            btn.disabled = false;
+        }
+    }
+
+    async function submitSettings() {
+        const color = document.getElementById('settingsThemeColor').value;
+        const btn = document.getElementById('saveSettingsBtn');
+        const orig = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+        
+        try {
+            const res = await fetch(`/event/{{ eid }}/update-settings`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ theme_color: color })
+            });
+            const data = await res.json();
+            if(data.success) {
+                showToast('Theme updated!', 'success');
+                setTimeout(() => location.reload(), 500);
+            } else {
+                showToast(data.error || 'Failed to update', 'error');
+            }
+        } catch(e) { 
+            showToast('Error saving theme', 'error'); 
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = orig;
+        }
+    }
+
+    async function resetTheme() {
+        document.getElementById('settingsThemeColor').value = '#6366f1';
+        await submitSettings();
+    }
+</script>
+{% endif %}
+
 <script>
     // Global Unread Notification Check
     async function checkGlobalUnread() {
