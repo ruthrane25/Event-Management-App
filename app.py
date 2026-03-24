@@ -27,8 +27,9 @@ CSRFProtect(app)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'eventapp-secret-key-2024')
 
 # Optimize PyMongo for Serverless/Vercel
+import certifi
 db_url = os.environ.get('DATABASE_URL', 'mongodb://localhost:27017/')
-client = MongoClient(db_url, maxPoolSize=1, serverSelectionTimeoutMS=5000)
+client = MongoClient(db_url, maxPoolSize=1, serverSelectionTimeoutMS=5000, tlsCAFile=certifi.where())
 db = client.get_default_database('event_app') if 'event_app' not in db_url else client.get_database()
 
 bcrypt = Bcrypt(app)
