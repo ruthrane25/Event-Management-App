@@ -23,6 +23,12 @@
     <a href="{{ url_for('guests', event_id=event.id) }}" class="event-nav-item">
         <i class="fas fa-users"></i> Guests
     </a>
+    <a href="{{ url_for('itinerary', event_id=event.id) }}" class="event-nav-item">
+        <i class="fas fa-clock"></i> Itinerary
+    </a>
+    <a href="{{ url_for('expenses', event_id=event.id) }}" class="event-nav-item">
+        <i class="fas fa-wallet"></i> Expenses
+    </a>
     <a href="{{ url_for('stay', event_id=event.id) }}" class="event-nav-item active">
         <i class="fas fa-bed"></i> Stay
     </a>

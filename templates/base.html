@@ -16,6 +16,14 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}"/>
   <meta name="csrf-token" content="{{ csrf_token() }}">
   {% block head %}{% endblock %}
+  {% if event and event.theme_color %}
+  <style>
+    :root {
+        --primary: {{ event.theme_color }};
+        --primary-hover: {{ event.theme_color }}E6; /* 90% opacity fallback */
+    }
+  </style>
+  {% endif %}
   <script>
     // Global CSRF Protection for AJAX/Fetch
     (function() {
@@ -79,6 +87,14 @@
         <a href="{{ url_for('guests', event_id=eid) }}" class="mob-nav-item {% if 'guests' in request.endpoint %}active{% endif %}">
             <i class="fas fa-users"></i>
             <span>Guests</span>
+        </a>
+        <a href="{{ url_for('itinerary', event_id=eid) }}" class="mob-nav-item {% if 'itinerary' in request.endpoint %}active{% endif %}">
+            <i class="fas fa-clock"></i>
+            <span>Agenda</span>
+        </a>
+        <a href="{{ url_for('expenses', event_id=eid) }}" class="mob-nav-item {% if 'expenses' in request.endpoint %}active{% endif %}">
+            <i class="fas fa-wallet"></i>
+            <span>Expenses</span>
         </a>
         <a href="{{ url_for('stay', event_id=eid) }}" class="mob-nav-item {% if 'stay' in request.endpoint %}active{% endif %}">
             <i class="fas fa-bed"></i>

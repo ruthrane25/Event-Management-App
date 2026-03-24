@@ -8,6 +8,8 @@ import random
 import string
 import os
 import json
+import csv
+import io
 import requests
 from dotenv import load_dotenv
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -56,6 +58,26 @@ def from_json_filter(value):
         return json.loads(value or '[]')
     except Exception:
         return []
+
+# ─────────────────────────────────────────────
+#  AUTHORIZATION HELPERS
+# ─────────────────────────────────────────────
+
+def is_member(event_id, user_id):
+    from bson.objectid import ObjectId
+    try:
+        member = db.event_members.find_one({"event_id": ObjectId(event_id), "user_id": ObjectId(user_id)})
+        return member and member.get('status') == 'approved'
+    except Exception:
+        return False
+
+def is_admin(event_id, user_id):
+    from bson.objectid import ObjectId
+    try:
+        member = db.event_members.find_one({"event_id": ObjectId(event_id), "user_id": ObjectId(user_id)})
+        return member and member.get('status') == 'approved' and member.get('role') == 'admin'
+    except Exception:
+        return False
 
 # Google OAuth config — set these as environment variables before running
 GOOGLE_CLIENT_ID     = os.environ.get('GOOGLE_CLIENT_ID', '')
@@ -422,6 +444,7 @@ def setup_event():
                 "name": event_name, 
                 "unique_code": code, 
                 "description": "", 
+                "theme_color": request.form.get('theme_color', '#6366f1'),
                 "created_at": datetime.utcnow()
             }
             res = db.events.insert_one(new_event)
@@ -660,8 +683,45 @@ def set_role(event_id, member_id):
 
 
 # ─────────────────────────────────────────────
-#  GUEST MANAGEMENT
+#  GUEST MANAGEMENT AND EXPORT
 # ─────────────────────────────────────────────
+
+@app.route('/event/<event_id>/guests/export', methods=['GET'])
+@login_required
+def export_guests(event_id):
+    if not is_member(event_id, current_user.id):
+        return "Unauthorized", 403
+        
+    event = db.events.find_one({"_id": ObjectId(event_id)})
+    guests_list = list(db.guests.find({"event_id": ObjectId(event_id)}).sort("created_at", 1))
+    
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(['Name', 'Guest Type', 'Family Members', 'Food Preference', 'RSVP Status', 'Added Date'])
+    
+    for g in guests_list:
+        g_type = 'Family' if g.get('is_family') else 'Individual'
+        fam_str = ""
+        if g.get('is_family') and g.get('family_members'):
+            try:
+                f_list = json.loads(g['family_members'])
+                if isinstance(f_list, list):
+                    fam_str = ", ".join(f_list)
+            except:
+                pass
+                
+        writer.writerow([
+            g.get('name', ''),
+            g_type,
+            fam_str,
+            g.get('food_preference', ''),
+            g.get('coming_status', 'pending').capitalize(),
+            g.get('created_at', datetime.utcnow()).strftime('%Y-%m-%d %H:%M')
+        ])
+        
+    response = Response(output.getvalue(), mimetype='text/csv')
+    response.headers['Content-Disposition'] = f'attachment; filename=guests_{event["unique_code"]}.csv'
+    return response
 
 @app.route('/event/<event_id>/guests')
 @login_required
@@ -1333,6 +1393,148 @@ def send_reminders(event_id):
             sent_count += 1
             
     return jsonify({'success': True, 'count': sent_count})
+
+# ─────────────────────────────────────────────
+#  ITINERARY MANAGEMENT
+# ─────────────────────────────────────────────
+
+@app.route('/event/<event_id>/itinerary')
+@login_required
+def itinerary(event_id):
+    if not is_member(event_id, current_user.id):
+        return redirect(url_for('dashboard'))
+    event = db.events.find_one({"_id": ObjectId(event_id)})
+    member = db.event_members.find_one({"event_id": ObjectId(event_id), "user_id": ObjectId(current_user.id)})
+    is_admin = member['role'] == 'admin'
+    items = list(db.itinerary.find({"event_id": ObjectId(event_id)}).sort([("date", 1), ("time", 1)]))
+    return render_template('itinerary.html', event=event, member=member, is_admin=is_admin, itinerary=items)
+
+@app.route('/event/<event_id>/itinerary/add', methods=['POST'])
+@login_required
+def add_itinerary(event_id):
+    if not is_member(event_id, current_user.id):
+        return jsonify({"error": "Unauthorized"}), 403
+    member = db.event_members.find_one({"event_id": ObjectId(event_id), "user_id": ObjectId(current_user.id)})
+    if member['role'] != 'admin':
+        return jsonify({"error": "Unauthorized"}), 403
+        
+    data = {
+        "event_id": ObjectId(event_id),
+        "title": request.form.get('title', '').strip(),
+        "date": request.form.get('date', '').strip(),
+        "time": request.form.get('time', '').strip(),
+        "location": request.form.get('location', '').strip(),
+        "description": request.form.get('description', '').strip(),
+        "created_by": ObjectId(current_user.id)
+    }
+    db.itinerary.insert_one(data)
+    flash("Added itinerary item", "success")
+    return redirect(url_for('itinerary', event_id=event_id))
+
+@app.route('/event/<event_id>/itinerary/<item_id>/delete', methods=['POST'])
+@login_required
+def delete_itinerary(event_id, item_id):
+    member = db.event_members.find_one({"event_id": ObjectId(event_id), "user_id": ObjectId(current_user.id)})
+    if not member or member['role'] != 'admin':
+        return jsonify({"error": "Unauthorized"}), 403
+    db.itinerary.delete_one({"_id": ObjectId(item_id), "event_id": ObjectId(event_id)})
+    return jsonify({"success": True})
+
+# ─────────────────────────────────────────────
+#  EXPENSES MANAGEMENT
+# ─────────────────────────────────────────────
+
+@app.route('/event/<event_id>/expenses')
+@login_required
+def expenses(event_id):
+    if not is_member(event_id, current_user.id):
+        return redirect(url_for('dashboard'))
+    event = db.events.find_one({"_id": ObjectId(event_id)})
+    member = db.event_members.find_one({"event_id": ObjectId(event_id), "user_id": ObjectId(current_user.id)})
+    is_admin = member['role'] == 'admin'
+    
+    items = list(db.expenses.find({"event_id": ObjectId(event_id)}).sort("date", -1))
+    total = sum(float(item.get('amount', 0)) for item in items)
+    
+    return render_template('expenses.html', event=event, member=member, is_admin=is_admin, expenses=items, total=total)
+
+@app.route('/event/<event_id>/expenses/add', methods=['POST'])
+@login_required
+def add_expense(event_id):
+    if not is_member(event_id, current_user.id):
+        return jsonify({"error": "Unauthorized"}), 403
+    member = db.event_members.find_one({"event_id": ObjectId(event_id), "user_id": ObjectId(current_user.id)})
+    if member['role'] != 'admin':
+        return jsonify({"error": "Unauthorized"}), 403
+        
+    data = {
+        "event_id": ObjectId(event_id),
+        "title": request.form.get('title', '').strip(),
+        "category": request.form.get('category', 'General'),
+        "amount": float(request.form.get('amount', 0)),
+        "date": request.form.get('date', '').strip() or datetime.utcnow().strftime('%Y-%m-%d'),
+        "created_by": ObjectId(current_user.id)
+    }
+    db.expenses.insert_one(data)
+    flash("Expense added", "success")
+    return redirect(url_for('expenses', event_id=event_id))
+
+@app.route('/event/<event_id>/expenses/<item_id>/delete', methods=['POST'])
+@login_required
+def delete_expense(event_id, item_id):
+    member = db.event_members.find_one({"event_id": ObjectId(event_id), "user_id": ObjectId(current_user.id)})
+    if not member or member['role'] != 'admin':
+        return jsonify({"error": "Unauthorized"}), 403
+    db.expenses.delete_one({"_id": ObjectId(item_id), "event_id": ObjectId(event_id)})
+    return jsonify({"success": True})
+
+# ─────────────────────────────────────────────
+#  PUBLIC SELF-RSVP
+# ─────────────────────────────────────────────
+
+@app.route('/rsvp/<event_code>', methods=['GET', 'POST'])
+def public_rsvp(event_code):
+    event = db.events.find_one({"unique_code": event_code.upper()})
+    if not event:
+        return "Event not found", 404
+        
+    if request.method == 'POST':
+        name = request.form.get('name', '').strip()
+        food_preference = request.form.get('food_preference', 'Veg')
+        coming_status = request.form.get('coming_status', 'yes')
+        is_family = request.form.get('is_family') == 'true'
+        
+        family_members = []
+        if is_family:
+            fam_str = request.form.get('family_members', '')
+            family_members = [m.strip() for m in fam_str.split(',') if m.strip()]
+            
+        guest = {
+            "event_id": event["_id"],
+            "name": name,
+            "is_family": is_family,
+            "family_members": json.dumps(family_members),
+            "food_preference": food_preference,
+            "coming_status": coming_status,
+            "travel_mode": "not_decided",
+            "ticket_status": "not_booked",
+            "parent_id": None,
+            "approval_status": "pending",
+            "created_at": datetime.utcnow()
+        }
+        db.guests.insert_one(guest)
+        flash("Your RSVP has been sent successfully!", "success")
+        return redirect(url_for('public_rsvp', event_code=event_code))
+        
+    return render_template('rsvp.html', event=event)
+
+@app.route('/event/<event_id>/guests/<guest_id>/approve', methods=['POST'])
+@login_required
+def approve_rsvp(event_id, guest_id):
+    if not is_admin(event_id, current_user.id):
+        return jsonify({"error": "Unauthorized"}), 403
+    db.guests.update_one({"_id": ObjectId(guest_id)}, {"$set": {"approval_status": "approved"}})
+    return jsonify({"success": True})
 
 if __name__ == '__main__':
     print('\n  [OK]  EventFlow is running at http://127.0.0.1:5000\n')

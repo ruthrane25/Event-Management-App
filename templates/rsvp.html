@@ -1,0 +1,68 @@
+{% extends 'base.html' %}
+{% block title %}RSVP — {{ event.name }}{% endblock %}
+
+{% block content %}
+<div class="setup-page">
+    <div class="setup-card" style="max-width: 500px; padding: 30px; margin-top: 20px;">
+        <div class="setup-header" style="text-align: center; margin-bottom: 25px;">
+            <div class="setup-icon" style="background: var(--primary); color: white; width: 60px; height: 60px; font-size: 1.5rem;"><i class="fas fa-envelope-open-text"></i></div>
+            <h2>{{ event.name }}</h2>
+            <p style="color: var(--text-secondary); margin-top: 10px;">You've been invited! Please RSVP below so the organizers can prepare for your arrival.</p>
+        </div>
+
+        <form method="POST" action="{{ url_for('public_rsvp', event_code=event.unique_code) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            
+            <div class="form-group">
+                <label class="form-label">Full Name</label>
+                <input type="text" name="name" class="form-input" placeholder="e.g. John Doe" required />
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">Food Preference</label>
+                <select name="food_preference" class="form-input" required>
+                    <option value="Veg">Veg</option>
+                    <option value="Non-veg">Non-veg</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">Are you attending?</label>
+                <select name="coming_status" class="form-input" required>
+                    <option value="yes" selected>Yes, I will be there!</option>
+                    <option value="no">No, sadly I can't make it.</option>
+                </select>
+            </div>
+            
+            <div class="form-group" style="margin-top: 20px;">
+                <label class="toggle-wrap">
+                    <span class="form-label" style="margin-bottom:0">Are you bringing family?</span>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="isFamilyToggle" name="is_family" value="true" onchange="toggleFamilySection()" />
+                        <span class="toggle-slider"></span>
+                    </label>
+                </label>
+            </div>
+
+            <div id="familySection" class="hidden" style="background: var(--bg); padding: 15px; border-radius: 8px; border: 1px solid var(--border); margin-bottom: 20px;">
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label class="form-label">Family Members Info</label>
+                    <p style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 10px;">Please list the names of the family members joining you (comma separated).</p>
+                    <textarea name="family_members" class="form-input" rows="2" placeholder="e.g. Jane Doe, Timmy Doe"></textarea>
+                </div>
+            </div>
+
+            <button type="submit" class="btn btn-primary btn-full" style="margin-top: 20px; font-size: 1.1rem; padding: 14px;">
+                <i class="fas fa-paper-plane"></i> Send RSVP
+            </button>
+        </form>
+    </div>
+</div>
+
+<script>
+    function toggleFamilySection() {
+        const show = document.getElementById('isFamilyToggle').checked;
+        document.getElementById('familySection').classList.toggle('hidden', !show);
+    }
+</script>
+{% endblock %}

@@ -1,0 +1,159 @@
+{% extends 'base.html' %}
+{% block title %}Itinerary — {{ event.name }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb"><a href="{{ url_for('dashboard') }}">Dashboard</a> / <a
+                href="{{ url_for('event_dashboard', event_id=event.id) }}">{{ event.name }}</a> / Itinerary</div>
+        <h1 class="page-title"><i class="fas fa-clock"></i> Event Schedule & Itinerary</h1>
+    </div>
+</div>
+
+<div class="event-nav">
+    <a href="{{ url_for('event_dashboard', event_id=event.id) }}" class="event-nav-item">
+        <i class="fas fa-tachometer-alt"></i> Dashboard
+    </a>
+    <a href="{{ url_for('guests', event_id=event.id) }}" class="event-nav-item">
+        <i class="fas fa-users"></i> Guests
+    </a>
+    <a href="{{ url_for('itinerary', event_id=event.id) }}" class="event-nav-item active">
+        <i class="fas fa-clock"></i> Itinerary
+    </a>
+    <a href="{{ url_for('stay', event_id=event.id) }}" class="event-nav-item">
+        <i class="fas fa-bed"></i> Stay
+    </a>
+    {% if is_admin %}
+    <a href="{{ url_for('travel', event_id=event.id) }}" class="event-nav-item">
+        <i class="fas fa-train"></i> Travel
+    </a>
+    {% endif %}
+    <a href="{{ url_for('notifications', event_id=event.id) }}" class="event-nav-item">
+        <i class="fas fa-bell"></i> Notifications
+    </a>
+</div>
+
+<div class="section-toolbar">
+    <h2 class="section-title">Schedule</h2>
+    {% if member.status == 'approved' %}
+    <button class="btn btn-primary" onclick="openAddItineraryModal()">
+        <i class="fas fa-plus"></i> Add Event
+    </button>
+    {% endif %}
+</div>
+
+<div class="itinerary-timeline">
+    {% for item in itinerary %}
+    <div class="timeline-item" id="item-{{ item._id }}">
+        <div class="timeline-time">{{ item.time }}<br><span style="font-size: 0.8rem; color: var(--text-secondary);">{{ item.date }}</span></div>
+        <div class="timeline-content">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                <h3>{{ item.title }}</h3>
+                <div style="display: flex; gap: 8px;">
+                    {% if is_admin or item.created_by == current_user.id %}
+                    <button class="icon-btn red" onclick="deleteItinerary('{{ item._id }}')"><i class="fas fa-trash"></i></button>
+                    {% endif %}
+                </div>
+            </div>
+            <p><i class="fas fa-map-marker-alt" style="color:var(--primary)"></i> {{ item.location }}</p>
+            {% if item.description %}
+            <p style="color: var(--text-secondary); margin-top: 5px;">{{ item.description }}</p>
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+    {% if not itinerary %}
+    <div class="empty-state">
+        <div class="empty-icon"><i class="fas fa-calendar-times"></i></div>
+        <h3>No schedule yet</h3>
+        <p>Add events to let everyone know the plan!</p>
+    </div>
+    {% endif %}
+</div>
+
+<style>
+.itinerary-timeline {
+    position: relative;
+    max-width: 800px;
+    margin: 20px auto;
+    padding: 20px;
+}
+.timeline-item {
+    display: flex;
+    margin-bottom: 20px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: var(--shadow-sm);
+}
+.timeline-time {
+    min-width: 100px;
+    font-weight: 700;
+    color: var(--primary);
+    border-right: 2px solid var(--border);
+    padding-right: 15px;
+    margin-right: 15px;
+}
+.timeline-content h3 { margin: 0 0 10px 0; }
+.timeline-content p { margin: 0; line-height: 1.4; }
+@media (max-width: 600px) {
+    .timeline-item { flex-direction: column; }
+    .timeline-time { border-right: none; border-bottom: 2px solid var(--border); padding-bottom: 15px; margin-bottom: 15px; }
+}
+</style>
+
+<!-- Add Modal -->
+<div class="modal-overlay hidden" id="addItineraryModal">
+    <div class="modal">
+        <div class="modal-header">
+            <h3><i class="fas fa-calendar-plus"></i> Add Schedule Item</h3>
+            <button class="modal-close" onclick="closeAddItineraryModal()"><i class="fas fa-times"></i></button>
+        </div>
+        <form action="{{ url_for('add_itinerary', event_id=event.id) }}" method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">Title</label>
+                    <input type="text" name="title" class="form-input" placeholder="e.g. Sangeet Ceremony" required>
+                </div>
+                <div style="display:flex; gap:10px;">
+                    <div class="form-group" style="flex:1;">
+                        <label class="form-label">Date</label>
+                        <input type="date" name="date" class="form-input" required>
+                    </div>
+                    <div class="form-group" style="flex:1;">
+                        <label class="form-label">Time</label>
+                        <input type="time" name="time" class="form-input" required>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Location</label>
+                    <input type="text" name="location" class="form-input" placeholder="e.g. Grand Hall" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Description (Optional)</label>
+                    <textarea name="description" class="form-input" rows="3"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-ghost" onclick="closeAddItineraryModal()">Cancel</button>
+                <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Save</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function openAddItineraryModal() { document.getElementById('addItineraryModal').classList.remove('hidden'); }
+function closeAddItineraryModal() { document.getElementById('addItineraryModal').classList.add('hidden'); }
+async function deleteItinerary(itemId) {
+    if(!confirm('Delete this itinerary item?')) return;
+    const res = await fetch(`/event/{{ event.id }}/itinerary/${itemId}/delete`, {method: 'POST'});
+    if(res.ok) {
+        document.getElementById('item-' + itemId).remove();
+        showToast('Deleted item successfully', 'info');
+    }
+}
+</script>
+{% endblock %}

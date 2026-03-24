@@ -1,0 +1,176 @@
+{% extends 'base.html' %}
+{% block title %}Expenses — {{ event.name }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb"><a href="{{ url_for('dashboard') }}">Dashboard</a> / <a
+                href="{{ url_for('event_dashboard', event_id=event.id) }}">{{ event.name }}</a> / Expenses</div>
+        <h1 class="page-title"><i class="fas fa-wallet"></i> Expenses & Budget</h1>
+    </div>
+</div>
+
+<div class="event-nav">
+    <a href="{{ url_for('event_dashboard', event_id=event.id) }}" class="event-nav-item">
+        <i class="fas fa-tachometer-alt"></i> Dashboard
+    </a>
+    <a href="{{ url_for('guests', event_id=event.id) }}" class="event-nav-item">
+        <i class="fas fa-users"></i> Guests
+    </a>
+    <a href="{{ url_for('itinerary', event_id=event.id) }}" class="event-nav-item">
+        <i class="fas fa-clock"></i> Itinerary
+    </a>
+    <a href="{{ url_for('expenses', event_id=event.id) }}" class="event-nav-item active">
+        <i class="fas fa-wallet"></i> Expenses
+    </a>
+    <a href="{{ url_for('stay', event_id=event.id) }}" class="event-nav-item">
+        <i class="fas fa-bed"></i> Stay
+    </a>
+    {% if is_admin %}
+    <a href="{{ url_for('travel', event_id=event.id) }}" class="event-nav-item">
+        <i class="fas fa-train"></i> Travel
+    </a>
+    {% endif %}
+    <a href="{{ url_for('notifications', event_id=event.id) }}" class="event-nav-item">
+        <i class="fas fa-bell"></i> Notifications
+    </a>
+</div>
+
+<div class="stats-row">
+    <div class="stat-card" style="border-left: 4px solid var(--primary);">
+        <div class="stat-icon" style="background: var(--primary-soft)"><i class="fas fa-dollar-sign" style="color:var(--primary)"></i></div>
+        <div class="stat-info">
+            <div class="stat-num" id="statTotal">{{ "%.2f"|format(total) }}</div>
+            <div class="stat-label">Total Spent</div>
+        </div>
+    </div>
+</div>
+
+<div class="section-toolbar">
+    <h2 class="section-title">Transactions</h2>
+    {% if member.status == 'approved' and is_admin %}
+    <button class="btn btn-primary" onclick="openAddExpenseModal()">
+        <i class="fas fa-plus"></i> Add Expense
+    </button>
+    {% endif %}
+</div>
+
+<div class="expenses-list">
+    {% for item in expenses %}
+    <div class="expense-card" id="expense-{{ item._id }}">
+        <div style="display:flex; align-items:center;">
+            <div class="expense-icon">
+                {% if item.category == 'Catering' %}<i class="fas fa-utensils"></i>
+                {% elif item.category == 'Venue' %}<i class="fas fa-map-marker-alt"></i>
+                {% elif item.category == 'Stay' %}<i class="fas fa-bed"></i>
+                {% elif item.category == 'Travel' %}<i class="fas fa-car"></i>
+                {% elif item.category == 'Decor' %}<i class="fas fa-paint-roller"></i>
+                {% else %}<i class="fas fa-receipt"></i>{% endif %}
+            </div>
+            <div class="expense-info">
+                <h3>{{ item.title }}</h3>
+                <span class="expense-meta">{{ item.date }} • {{ item.category }}</span>
+            </div>
+        </div>
+        <div class="expense-amount-actions">
+            <div class="expense-amount">${{ "%.2f"|format(item.amount) }}</div>
+            {% if is_admin %}
+            <button class="icon-btn red" onclick="deleteExpense('{{ item._id }}')"><i class="fas fa-trash"></i></button>
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+    {% if not expenses %}
+    <div class="empty-state">
+        <div class="empty-icon"><i class="fas fa-receipt"></i></div>
+        <h3>No expenses yet</h3>
+        <p>Keep track of your budget here!</p>
+    </div>
+    {% endif %}
+</div>
+
+<style>
+.expenses-list { max-width: 800px; margin: 0 auto; padding-top: 10px; }
+.expense-card {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 15px 20px;
+    margin-bottom: 12px;
+    box-shadow: var(--shadow-sm);
+}
+.expense-icon {
+    width: 44px; height: 44px;
+    border-radius: 8px;
+    background: #f3f4f6;
+    color: var(--text-secondary);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.2rem; margin-right: 15px;
+}
+.expense-info h3 { margin: 0 0 5px 0; font-size: 1.1rem; }
+.expense-meta { font-size: 0.85rem; color: var(--text-light); }
+.expense-amount-actions { display: flex; align-items: center; gap: 15px; }
+.expense-amount { font-size: 1.25rem; font-weight: 700; color: var(--text-primary); }
+</style>
+
+<!-- Add Modal -->
+<div class="modal-overlay hidden" id="addExpenseModal">
+    <div class="modal">
+        <div class="modal-header">
+            <h3><i class="fas fa-receipt"></i> Add Expense</h3>
+            <button class="modal-close" onclick="closeAddExpenseModal()"><i class="fas fa-times"></i></button>
+        </div>
+        <form action="{{ url_for('add_expense', event_id=event.id) }}" method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">Title / Description</label>
+                    <input type="text" name="title" class="form-input" placeholder="e.g. DJ Advance Payment" required>
+                </div>
+                <div style="display:flex; gap:10px;">
+                    <div class="form-group" style="flex:1;">
+                        <label class="form-label">Amount ($)</label>
+                        <input type="number" step="0.01" name="amount" class="form-input" placeholder="0.00" required>
+                    </div>
+                    <div class="form-group" style="flex:1;">
+                        <label class="form-label">Date</label>
+                        <input type="date" name="date" class="form-input" required value="{{ current_date }}">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Category</label>
+                    <select name="category" class="form-input" required>
+                        <option value="Catering">Catering & Food</option>
+                        <option value="Venue">Venue</option>
+                        <option value="Stay">Accommodation</option>
+                        <option value="Travel">Travel</option>
+                        <option value="Decor">Decorations</option>
+                        <option value="General" selected>General/Other</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-ghost" onclick="closeAddExpenseModal()">Cancel</button>
+                <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Save</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function openAddExpenseModal() { document.getElementById('addExpenseModal').classList.remove('hidden'); }
+function closeAddExpenseModal() { document.getElementById('addExpenseModal').classList.add('hidden'); }
+async function deleteExpense(itemId) {
+    if(!confirm('Delete this expense record?')) return;
+    const res = await fetch(`/event/{{ event.id }}/expenses/${itemId}/delete`, {method: 'POST'});
+    if(res.ok) {
+        document.getElementById('expense-' + itemId).remove();
+        showToast('Expense removed', 'info');
+        setTimeout(() => location.reload(), 800);
+    }
+}
+</script>
+{% endblock %}
