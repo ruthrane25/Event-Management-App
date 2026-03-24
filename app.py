@@ -662,10 +662,12 @@ def guests(event_id):
         flash('Access denied.', 'error')
         return redirect(url_for('dashboard'))
         
-    guest_list_cursor = db.guests.find({"event_id": ObjectId(event_id), "parent_id": None})
+    guest_list_cursor = db.guests.find({"event_id": ObjectId(event_id), "parent_id": None}).sort("created_at", -1)
     guest_list = []
     for g in guest_list_cursor:
         g['id'] = str(g['_id'])
+        if 'created_at' not in g:
+            g['created_at'] = datetime.utcnow()
         guest_list.append(g)
         
     total_guests = db.guests.count_documents({"event_id": ObjectId(event_id)})
@@ -713,7 +715,8 @@ def add_guest(event_id):
         "coming_status": "coming",
         "travel_mode": "not_decided",
         "ticket_status": "not_booked",
-        "parent_id": None
+        "parent_id": None,
+        "created_at": datetime.utcnow()
     }
     
     result = db.guests.insert_one(primary_guest)
@@ -733,7 +736,8 @@ def add_guest(event_id):
                     "coming_status": "coming",
                     "travel_mode": "not_decided",
                     "ticket_status": "not_booked",
-                    "parent_id": primary_guest_id
+                    "parent_id": primary_guest_id,
+                    "created_at": datetime.utcnow()
                 }
                 member_docs.append(m_guest)
         if member_docs:
