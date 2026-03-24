@@ -609,6 +609,16 @@ def share_event_code(event_id):
     else:
         return jsonify({'error': 'Failed to send email. Please check SMTP settings.'}), 500
 
+@app.route('/event/<event_id>/update-settings', methods=['POST'])
+@login_required
+def update_event_settings(event_id):
+    if not is_admin(event_id, current_user.id):
+        return jsonify({'error': 'Unauthorized'}), 403
+    data = request.get_json()
+    new_color = data.get('theme_color', '').strip()
+    if new_color:
+        db.events.update_one({"_id": ObjectId(event_id)}, {"$set": {"theme_color": new_color}})
+    return jsonify({'success': True})
 
 # ─────────────────────────────────────────────
 #  MEMBER MANAGEMENT (Admin only)
@@ -1404,6 +1414,8 @@ def itinerary(event_id):
     if not is_member(event_id, current_user.id):
         return redirect(url_for('dashboard'))
     event = db.events.find_one({"_id": ObjectId(event_id)})
+    if event:
+        event['id'] = str(event['_id'])
     member = db.event_members.find_one({"event_id": ObjectId(event_id), "user_id": ObjectId(current_user.id)})
     is_admin = member['role'] == 'admin'
     items = list(db.itinerary.find({"event_id": ObjectId(event_id)}).sort([("date", 1), ("time", 1)]))
@@ -1450,6 +1462,8 @@ def expenses(event_id):
     if not is_member(event_id, current_user.id):
         return redirect(url_for('dashboard'))
     event = db.events.find_one({"_id": ObjectId(event_id)})
+    if event:
+        event['id'] = str(event['_id'])
     member = db.event_members.find_one({"event_id": ObjectId(event_id), "user_id": ObjectId(current_user.id)})
     is_admin = member['role'] == 'admin'
     
