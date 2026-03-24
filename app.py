@@ -24,6 +24,15 @@ app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1, x_for=1, x_port=1)
 Talisman(app, content_security_policy=None)
 CSRFProtect(app)
 
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+limiter = Limiter(
+    get_remote_address,
+    app=app,
+    default_limits=["1000 per day", "300 per hour"],
+    storage_uri="memory://"
+)
+
 from datetime import timedelta
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'eventapp-secret-key-2024')
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=365)
@@ -168,6 +177,7 @@ def index():
     return redirect(url_for('login'))
 
 @app.route('/login', methods=['GET', 'POST'])
+@limiter.limit("10 per minute")
 def login():
     if current_user.is_authenticated:
         return redirect(url_for('dashboard'))
@@ -187,6 +197,7 @@ def login():
     return render_template('auth.html', mode='login')
 
 @app.route('/register', methods=['GET', 'POST'])
+@limiter.limit("10 per minute")
 def register():
     if current_user.is_authenticated:
         return redirect(url_for('dashboard'))
@@ -240,6 +251,7 @@ def register():
     return render_template('auth.html', mode='register')
 
 @app.route('/verify-otp', methods=['GET', 'POST'])
+@limiter.limit("10 per minute")
 def verify_otp():
     email = session.get('pending_email')
     if not email:
@@ -282,6 +294,7 @@ def verify_otp():
     return render_template('verify_otp.html', email=email)
 
 @app.route('/resend-otp')
+@limiter.limit("3 per minute")
 def resend_otp():
     email = session.get('pending_email')
     if not email:
@@ -708,6 +721,20 @@ def add_guest(event_id):
     
     if not name:
         return jsonify({'error': 'Name is required'}), 400
+        
+    # Check for duplicates (case-insensitive and substring checking)
+    existing_guests = list(db.guests.find({"event_id": ObjectId(event_id)}))
+    new_names_to_check = [name.lower()]
+    if is_family and family_members:
+        new_names_to_check.extend([m.strip().lower() for m in family_members if m.strip()])
+        
+    for g in existing_guests:
+        g_name_lower = g.get('name', '').lower()
+        for new_n in new_names_to_check:
+            # Prevent "Ruthvij" from being added if "Ruthvij Rane" exists, and vice versa
+            if len(new_n) >= 3 and len(g_name_lower) >= 3:
+                if new_n in g_name_lower or g_name_lower in new_n:
+                    return jsonify({'error': f'A guest matching "{new_n.title()}" is already registered as "{g.get("name")}".'}), 400
         
     food_preference = data.get('food_preference', 'Veg')
     primary_guest = {
@@ -1269,6 +1296,43 @@ def unread_count(event_id):
     })
     return jsonify({'count': count})
 
+
+@app.route('/event/<event_id>/send-reminders', methods=['POST'])
+@login_required
+def send_reminders(event_id):
+    if not is_admin(event_id, current_user.id):
+        return jsonify({'error': 'Unauthorized'}), 403
+        
+    event = db.events.find_one({"_id": ObjectId(event_id)})
+    members = list(db.event_members.find({"event_id": ObjectId(event_id), "status": 'approved'}))
+    
+    sent_count = 0
+    for mem in members:
+        user = db.users.find_one({"_id": mem['user_id']})
+        if not user or not user.get('email'): continue
+        
+        user_guests = list(db.guests.find({"event_id": ObjectId(event_id), "added_by": mem['user_id']}))
+        if not user_guests: continue
+        
+        guest_text = "<br>".join([f"- {g.get('name')} (Status: {g.get('coming_status', 'pending')})" for g in user_guests])
+        
+        body_html = f"""
+        <html><body>
+        <h3>Event Reminder: {event.get('name')} is coming up!</h3>
+        <p>Hello {user.get('name', 'there')},</p>
+        <p>This is a reminder for the upcoming event. Please review and finalize the details for your guests:</p>
+        <p>Your managed guests:</p>
+        <p>{guest_text}</p>
+        <br>
+        <p>You can review room assignments and travel details on the <a href="{url_for('event_dashboard', event_id=event_id, _external=True)}">event dashboard</a>.</p>
+        <p>Thanks!</p>
+        </body></html>
+        """
+        
+        if send_notification_email(user['email'], f"Reminder: {event.get('name')}", body_html):
+            sent_count += 1
+            
+    return jsonify({'success': True, 'count': sent_count})
 
 if __name__ == '__main__':
     print('\n  [OK]  EventFlow is running at http://127.0.0.1:5000\n')

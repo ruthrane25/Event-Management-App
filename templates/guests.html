@@ -618,5 +618,60 @@
             setTimeout(() => location.reload(), 500);
         }
     }
+
+    // --- Pagination Logic ---
+    let visibleLimits = {
+        'guestList': 50,
+        'comingList': 50,
+        'notComingList': 50,
+        'vegList': 50,
+        'nonVegList': 50
+    };
+
+    function applyPagination(listId) {
+        const list = document.getElementById(listId);
+        if (!list) return;
+        const items = list.children;
+        let count = 0;
+        
+        for (let i = 0; i < items.length; i++) {
+            const item = items[i];
+            if (item.classList.contains('empty-state')) continue;
+            if (item.id === 'loadMoreBtn-' + listId) continue;
+            
+            if (count < visibleLimits[listId]) {
+                item.style.display = item.classList.contains('guest-card') ? 'flex' : 'flex';
+            } else {
+                item.style.display = 'none';
+            }
+            count++;
+        }
+        
+        let btn = document.getElementById('loadMoreBtn-' + listId);
+        if (visibleLimits[listId] < count) {
+            if (!btn) {
+                btn = document.createElement('button');
+                btn.id = 'loadMoreBtn-' + listId;
+                btn.className = 'btn btn-ghost';
+                btn.style.width = '100%';
+                btn.style.marginTop = '20px';
+                btn.innerHTML = '<i class="fas fa-chevron-down"></i> Load More';
+                btn.onclick = () => {
+                    visibleLimits[listId] += 50;
+                    applyPagination(listId);
+                };
+                list.appendChild(btn);
+            } else {
+                btn.style.display = 'block';
+                list.appendChild(btn); // Move to bottom
+            }
+        } else if (btn) {
+            btn.style.display = 'none';
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        ['guestList', 'comingList', 'notComingList', 'vegList', 'nonVegList'].forEach(applyPagination);
+    });
 </script>
 {% endblock %}

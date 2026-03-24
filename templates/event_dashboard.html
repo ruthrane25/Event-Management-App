@@ -182,6 +182,30 @@
         checkUnread();
         setInterval(checkUnread, 30000); // Check every 30s
     });
+
+    async function sendReminders() {
+        if (!confirm('Send a massive email reminder to all users for their guests?')) return;
+        
+        const btn = document.getElementById('remindersBtn');
+        const originalHtml = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending...';
+        
+        try {
+            const res = await fetch(`/event/{{ event.id }}/send-reminders`, { method: 'POST' });
+            const data = await res.json();
+            if(data.success) {
+                showToast(`Sent ${data.count} reminder emails successfully!`, 'success');
+            } else {
+                showToast(data.error || 'Failed to send reminders', 'error');
+            }
+        } catch(e) {
+            showToast('An error occurred', 'error');
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = originalHtml;
+        }
+    }
 </script>
 
 <!-- Share Code Modal -->
@@ -230,6 +254,11 @@
                 <button class="share-btn" onclick="openShareModal()">
                     <i class="fas fa-paper-plane"></i> Share via Email
                 </button>
+                {% if is_admin %}
+                <button class="share-btn" onclick="sendReminders()" id="remindersBtn" style="color:var(--primary); border-color:var(--primary-soft)">
+                    <i class="fas fa-bullhorn"></i> Blast Reminders
+                </button>
+                {% endif %}
             </div>
         </div>
     </div>
