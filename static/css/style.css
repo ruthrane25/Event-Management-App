@@ -2198,35 +2198,10 @@ body.auth-body .main-content {
     .navbar { padding: 0 16px; }
     .nav-text { display: none; }
     .hide-mobile { display: none !important; }
-    
-    .stats-row { 
-        grid-template-columns: 1fr; 
-        gap: 16px;
-    }
-
-    /* Mobile Countdown Adjustments */
-    .countdown-widget {
-        gap: 8px;
-    }
-    .countdown-item {
-        min-width: 60px;
-        padding: 8px 4px;
-        border-radius: 8px;
-    }
-    .countdown-value {
-        font-size: 1.2rem;
-    }
-    .countdown-label {
-        font-size: 0.6rem;
-    }
-
-    .chart-container {
-        height: 250px !important;
-    }
-
     .mobile-bottom-nav { display: flex; }
     .main-content { padding-bottom: 90px; }
     .page-header { flex-direction: column; gap: 12px; }
+    .page-title { font-size: 1.4rem; }
     .page-title { font-size: 1.4rem; }
     .event-nav { overflow-x: auto; padding-bottom: 8px; -webkit-overflow-scrolling: touch; }
     .event-nav-item { padding: 8px 14px; font-size: 0.8rem; }
@@ -2240,53 +2215,15 @@ body.auth-body .main-content {
     .modal { margin: 10px; max-height: 90vh; overflow-y: auto; }
     .stat-num { font-size: 1.4rem; }
     .rooms-grid { grid-template-columns: 1fr; }
-}
-
-/* ── Analytics Widgets ─────────────────────────────────── */
-.stats-row {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 20px;
-    width: 100%;
-}
-
-/* ── Countdown Widget ──────────────────────────────────── */
-.countdown-widget {
-    display: flex;
-    justify-content: center;
-    gap: 12px;
-    margin-top: 20px;
-    flex-wrap: wrap;
-    width: 100%;
-}
-.countdown-item {
-    background: rgba(99, 102, 241, 0.08);
-    border: 1px solid rgba(99, 102, 241, 0.15);
-    padding: 10px;
-    border-radius: 12px;
-    min-width: 75px;
-    text-align: center;
-    backdrop-filter: blur(8px);
-}
-.countdown-value {
-    display: block;
-    font-size: 1.5rem;
-    font-weight: 800;
-    color: var(--primary);
-    line-height: 1;
-}
-.countdown-label {
-    font-size: 0.7rem;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    color: var(--text-secondary);
-    font-weight: 600;
-}
-
-.chart-container {
-    position: relative;
-    height: 200px;
-    width: 100%;
+    
+    /* Phase 2 Mobile Adjustments */
+    .stats-row { grid-template-columns: 1fr !important; }
+    .countdown-widget { gap: 8px; margin-top: 15px; }
+    .countdown-item { min-width: 60px; padding: 8px; }
+    .countdown-value { font-size: 1.2rem; }
+    .countdown-label { font-size: 0.6rem; }
+    
+    .task-card { padding: 12px 15px; }
 }
 
 /* Utilities */

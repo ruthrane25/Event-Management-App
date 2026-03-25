@@ -48,6 +48,38 @@
         background: var(--secondary);
         color: white;
     }
+    /* Countdown Styles */
+    .countdown-widget {
+        display: flex;
+        justify-content: center;
+        gap: 12px;
+        margin-top: 20px;
+        flex-wrap: wrap;
+        width: 100%;
+    }
+    .countdown-item {
+        background: rgba(99, 102, 241, 0.1);
+        border: 1px solid rgba(99, 102, 241, 0.2);
+        padding: 10px;
+        border-radius: 10px;
+        min-width: 70px;
+        text-align: center;
+        backdrop-filter: blur(5px);
+    }
+    .countdown-value {
+        display: block;
+        font-size: 1.5rem;
+        font-weight: 800;
+        color: var(--primary);
+        line-height: 1;
+    }
+    .countdown-label {
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        color: var(--text-secondary);
+        font-weight: 600;
+    }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 {% endblock %}
@@ -417,7 +449,7 @@
         <h3 style="margin-bottom:15px; font-size: 1.05rem; display:flex; align-items:center; gap:8px;">
             <i class="fas fa-chart-pie" style="color:var(--primary)"></i> Budget Breakdown
         </h3>
-        <div class="chart-container">
+        <div style="position: relative; height: 200px; width: 100%;">
             <canvas id="budgetChart"></canvas>
         </div>
     </div>
@@ -425,7 +457,7 @@
         <h3 style="margin-bottom:15px; font-size: 1.05rem; display:flex; align-items:center; gap:8px;">
             <i class="fas fa-utensils" style="color:var(--primary)"></i> Meal Preferences
         </h3>
-        <div class="chart-container">
+        <div style="position: relative; height: 200px; width: 100%;">
             <canvas id="foodChart"></canvas>
         </div>
     </div>

@@ -7,6 +7,35 @@
     @media (max-width: 600px) {
         .rsvp-card { padding: 20px; margin: 20px auto; border-radius: var(--radius); }
     }
+    /* Countdown Styles */
+    .countdown-widget {
+        display: flex;
+        justify-content: center;
+        gap: 8px;
+        margin-top: 15px;
+        flex-wrap: wrap;
+    }
+    .countdown-item {
+        background: rgba(99, 102, 241, 0.08);
+        border: 1px solid rgba(99, 102, 241, 0.15);
+        padding: 8px;
+        border-radius: 8px;
+        min-width: 60px;
+        text-align: center;
+    }
+    .countdown-value {
+        display: block;
+        font-size: 1.25rem;
+        font-weight: 800;
+        color: var(--primary);
+        line-height: 1;
+    }
+    .countdown-label {
+        font-size: 0.6rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: var(--text-secondary);
+    }
 </style>
 <div class="setup-page" style="display: block; padding-top: 10px;">
     <div class="rsvp-card">
