@@ -2202,7 +2202,7 @@ body.auth-body .main-content {
     .main-content { padding-bottom: 90px; }
     .page-header { flex-direction: column; gap: 12px; }
     .page-title { font-size: 1.4rem; }
-    .btn { width: 100%; justify-content: center; padding: 12px 20px; }
+    .page-title { font-size: 1.4rem; }
     .event-nav { overflow-x: auto; padding-bottom: 8px; -webkit-overflow-scrolling: touch; }
     .event-nav-item { padding: 8px 14px; font-size: 0.8rem; }
     .accommodation-header, .travel-card, .guest-row, .approval-card, .member-card {
