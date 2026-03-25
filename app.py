@@ -653,9 +653,16 @@ def update_event_settings(event_id):
     if not is_admin(event_id, current_user.id):
         return jsonify({'error': 'Unauthorized'}), 403
     data = request.get_json()
-    new_color = data.get('theme_color', '').strip()
-    if new_color:
-        db.events.update_one({"_id": ObjectId(event_id)}, {"$set": {"theme_color": new_color}})
+    update_data = {}
+    
+    if 'theme_color' in data:
+        update_data['theme_color'] = data['theme_color']
+    if 'event_date' in data:
+        update_data['date'] = data['event_date']
+        
+    if update_data:
+        db.events.update_one({"_id": ObjectId(event_id)}, {"$set": update_data})
+        
     return jsonify({'success': True})
 
 # ─────────────────────────────────────────────
