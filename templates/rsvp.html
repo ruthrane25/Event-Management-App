@@ -2,8 +2,14 @@
 {% block title %}RSVP — {{ event.name }}{% endblock %}
 
 {% block content %}
-<div class="setup-page">
-    <div class="setup-card" style="max-width: 500px; padding: 30px; margin-top: 20px;">
+<style>
+    .rsvp-card { max-width: 500px; padding: 40px; margin: 40px auto; background: var(--bg-card); border-radius: var(--radius-lg); border: 1px solid var(--border); box-shadow: var(--shadow-lg); }
+    @media (max-width: 600px) {
+        .rsvp-card { padding: 20px; margin: 20px auto; border-radius: var(--radius); }
+    }
+</style>
+<div class="setup-page" style="display: block; padding-top: 10px;">
+    <div class="rsvp-card">
         <div class="setup-header" style="text-align: center; margin-bottom: 25px;">
             <div class="setup-icon" style="background: var(--primary); color: white; width: 60px; height: 60px; font-size: 1.5rem;"><i class="fas fa-envelope-open-text"></i></div>
             <h2>{{ event.name }}</h2>

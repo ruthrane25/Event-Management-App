@@ -2123,10 +2123,18 @@ body.auth-body .main-content {
     backdrop-filter: blur(14px);
     border-top: 1px solid var(--border);
     display: none; 
-    justify-content: space-around;
+    justify-content: flex-start;
     align-items: center;
     z-index: 1000;
     padding-bottom: env(safe-area-inset-bottom);
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    gap: 5px;
+    padding: 0 10px;
+}
+
+.mobile-bottom-nav::-webkit-scrollbar {
+    display: none;
 }
 
 .mob-nav-item {
@@ -2141,7 +2149,9 @@ body.auth-body .main-content {
     transition: var(--transition);
     position: relative;
     padding: 8px 0;
-    flex: 1;
+    flex: 0 0 auto;
+    width: 65px;
+    scroll-snap-align: start;
 }
 
 .mob-nav-item i {
@@ -2160,7 +2170,7 @@ body.auth-body .main-content {
 .mob-badge {
     position: absolute;
     top: 4px;
-    right: 25%;
+    right: 20%;
     background: var(--danger);
     color: #fff;
     font-size: 0.6rem;

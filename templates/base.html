@@ -70,8 +70,17 @@
     border-radius: 12px;
     box-shadow: var(--shadow-lg);
     width: 260px;
+    max-width: calc(100vw - 32px);
     z-index: 1000;
     overflow: hidden;
+}
+@media (max-width: 600px) {
+    .profile-dropdown {
+        position: fixed;
+        top: var(--nav-h);
+        right: 16px;
+        left: auto;
+    }
 }
 .dropdown-header { padding: 15px; border-bottom: 1px solid var(--border); text-align: center; }
 .dropdown-body { padding: 5px 0; }
