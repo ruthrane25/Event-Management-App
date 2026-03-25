@@ -21,6 +21,9 @@
     <a href="{{ url_for('itinerary', event_id=event.id) }}" class="event-nav-item">
         <i class="fas fa-clock"></i> Itinerary
     </a>
+    <a href="{{ url_for('tasks', event_id=event.id) }}" class="event-nav-item">
+        <i class="fas fa-tasks"></i> Tasks
+    </a>
     <a href="{{ url_for('expenses', event_id=event.id) }}" class="event-nav-item">
         <i class="fas fa-wallet"></i> Expenses
     </a>

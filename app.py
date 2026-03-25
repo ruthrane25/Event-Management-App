@@ -482,6 +482,7 @@ def setup_event():
                 "unique_code": code, 
                 "description": "", 
                 "theme_color": request.form.get('theme_color', '#6366f1'),
+                "date": request.form.get('event_date', ''),
                 "created_at": datetime.utcnow()
             }
             res = db.events.insert_one(new_event)
@@ -1490,6 +1491,74 @@ def delete_itinerary(event_id, item_id):
     return jsonify({"success": True})
 
 # ─────────────────────────────────────────────
+#  TASKS MANAGEMENT
+# ─────────────────────────────────────────────
+
+@app.route('/event/<event_id>/tasks')
+@login_required
+def tasks(event_id):
+    if not is_member(event_id, current_user.id):
+        return redirect(url_for('dashboard'))
+    event = db.events.find_one({"_id": ObjectId(event_id)})
+    if event:
+        event['id'] = str(event['_id'])
+    member = get_member(event_id, current_user.id)
+    is_admin_user = member['role'] == 'admin'
+    
+    tasks_list = list(db.tasks.find({"event_id": ObjectId(event_id)}).sort("created_at", -1))
+    
+    completed = [t for t in tasks_list if t.get('completed')]
+    pending = [t for t in tasks_list if not t.get('completed')]
+    progress = (len(completed) / len(tasks_list) * 100) if tasks_list else 0
+    
+    return render_template('tasks.html', event=event, member=member, is_admin=is_admin_user, 
+                           pending_tasks=pending, completed_tasks=completed, progress=progress)
+
+@app.route('/event/<event_id>/tasks/add', methods=['POST'])
+@login_required
+def add_task(event_id):
+    if not is_admin_or_manager(event_id, current_user.id):
+        return jsonify({"error": "Unauthorized"}), 403
+        
+    title = request.form.get('title', '').strip()
+    if not title:
+        flash("Task title required", "error")
+        return redirect(url_for('tasks', event_id=event_id))
+        
+    task_data = {
+        "event_id": ObjectId(event_id),
+        "title": title,
+        "completed": False,
+        "created_by": ObjectId(current_user.id),
+        "created_at": datetime.utcnow()
+    }
+    db.tasks.insert_one(task_data)
+    flash("Task added", "success")
+    return redirect(url_for('tasks', event_id=event_id))
+
+@app.route('/event/<event_id>/tasks/<task_id>/toggle', methods=['POST'])
+@login_required
+def toggle_task(event_id, task_id):
+    if not is_member(event_id, current_user.id):
+        return jsonify({"error": "Unauthorized"}), 403
+        
+    task = db.tasks.find_one({"_id": ObjectId(task_id)})
+    if not task:
+        return jsonify({"error": "Not found"}), 404
+        
+    db.tasks.update_one({"_id": ObjectId(task_id)}, {"$set": {"completed": not task.get('completed')}})
+    return jsonify({"success": True})
+
+@app.route('/event/<event_id>/tasks/<task_id>/delete', methods=['POST'])
+@login_required
+def delete_task(event_id, task_id):
+    if not is_admin_or_manager(event_id, current_user.id):
+        return jsonify({"error": "Unauthorized"}), 403
+    
+    db.tasks.delete_one({"_id": ObjectId(task_id), "event_id": ObjectId(event_id)})
+    return jsonify({"success": True})
+
+# ─────────────────────────────────────────────
 #  EXPENSES MANAGEMENT
 # ─────────────────────────────────────────────
 
@@ -1586,6 +1655,35 @@ def approve_rsvp(event_id, guest_id):
         return jsonify({"error": "Unauthorized"}), 403
     db.guests.update_one({"_id": ObjectId(guest_id)}, {"$set": {"approval_status": "approved"}})
     return jsonify({"success": True})
+
+@app.route('/api/event/<event_id>/analytics')
+@login_required
+def event_analytics(event_id):
+    if not is_member(event_id, current_user.id):
+        return jsonify({"error": "Unauthorized"}), 403
+    
+    pipeline_expenses = [
+        {"$match": {"event_id": ObjectId(event_id)}},
+        {"$group": {"_id": "$category", "total": {"$sum": "$amount"}}}
+    ]
+    expense_data = list(db.expenses.aggregate(pipeline_expenses))
+    
+    pipeline_food = [
+        {"$match": {"event_id": ObjectId(event_id), "coming_status": "yes"}},
+        {"$group": {"_id": "$food_preference", "count": {"$sum": 1}}}
+    ]
+    food_data = list(db.guests.aggregate(pipeline_food))
+    
+    return jsonify({
+        "budget": {
+            "labels": [str(x['_id']) for x in expense_data],
+            "data": [float(x['total']) for x in expense_data]
+        },
+        "food": {
+            "labels": [str(x['_id']) for x in food_data],
+            "data": [int(x['count']) for x in food_data]
+        }
+    })
 
 if __name__ == '__main__':
     print('\n  [OK]  EventFlow is running at http://127.0.0.1:5000\n')

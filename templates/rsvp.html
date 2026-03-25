@@ -7,13 +7,64 @@
     @media (max-width: 600px) {
         .rsvp-card { padding: 20px; margin: 20px auto; border-radius: var(--radius); }
     }
+    /* Countdown Styles */
+    .countdown-widget {
+        display: flex;
+        justify-content: center;
+        gap: 8px;
+        margin-top: 15px;
+        flex-wrap: wrap;
+    }
+    .countdown-item {
+        background: rgba(99, 102, 241, 0.08);
+        border: 1px solid rgba(99, 102, 241, 0.15);
+        padding: 8px;
+        border-radius: 8px;
+        min-width: 60px;
+        text-align: center;
+    }
+    .countdown-value {
+        display: block;
+        font-size: 1.25rem;
+        font-weight: 800;
+        color: var(--primary);
+        line-height: 1;
+    }
+    .countdown-label {
+        font-size: 0.6rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: var(--text-secondary);
+    }
 </style>
 <div class="setup-page" style="display: block; padding-top: 10px;">
     <div class="rsvp-card">
         <div class="setup-header" style="text-align: center; margin-bottom: 25px;">
             <div class="setup-icon" style="background: var(--primary); color: white; width: 60px; height: 60px; font-size: 1.5rem;"><i class="fas fa-envelope-open-text"></i></div>
             <h2>{{ event.name }}</h2>
-            <p style="color: var(--text-secondary); margin-top: 10px;">You've been invited! Please RSVP below so the organizers can prepare for your arrival.</p>
+            
+            {% if event.date %}
+            <div class="countdown-widget" id="countdownWidget">
+                <div class="countdown-item">
+                    <span class="countdown-value" id="cd-days">00</span>
+                    <span class="countdown-label">Days</span>
+                </div>
+                <div class="countdown-item">
+                    <span class="countdown-value" id="cd-hours">00</span>
+                    <span class="countdown-label">Hrs</span>
+                </div>
+                <div class="countdown-item">
+                    <span class="countdown-value" id="cd-mins">00</span>
+                    <span class="countdown-label">Mins</span>
+                </div>
+                <div class="countdown-item">
+                    <span class="countdown-value" id="cd-secs">00</span>
+                    <span class="countdown-label">Secs</span>
+                </div>
+            </div>
+            {% endif %}
+
+            <p style="color: var(--text-secondary); margin-top: 15px;">You've been invited! Please RSVP below so the organizers can prepare for your arrival.</p>
         </div>
 
         <form method="POST" action="{{ url_for('public_rsvp', event_code=event.unique_code) }}">
@@ -69,6 +120,41 @@
     function toggleFamilySection() {
         const show = document.getElementById('isFamilyToggle').checked;
         document.getElementById('familySection').classList.toggle('hidden', !show);
+    }
+
+    // Countdown Logic
+    const eventDate = "{{ event.date }}";
+    function updateCountdown() {
+        if (!eventDate) return;
+        const target = new Date(eventDate).getTime();
+        const now = new Date().getTime();
+        const diff = target - now;
+
+        if (diff <= 0) {
+            const container = document.getElementById('countdownWidget');
+            if (container) container.innerHTML = '<div class="countdown-item" style="width:100%"><span class="countdown-value">Event is Live!</span></div>';
+            return;
+        }
+
+        const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+        const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+        const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+        const secs = Math.floor((diff % (1000 * 60)) / 1000);
+
+        const d_el = document.getElementById('cd-days');
+        const h_el = document.getElementById('cd-hours');
+        const m_el = document.getElementById('cd-mins');
+        const s_el = document.getElementById('cd-secs');
+
+        if(d_el) d_el.textContent = days.toString().padStart(2, '0');
+        if(h_el) h_el.textContent = hours.toString().padStart(2, '0');
+        if(m_el) m_el.textContent = mins.toString().padStart(2, '0');
+        if(s_el) s_el.textContent = secs.toString().padStart(2, '0');
+    }
+
+    if (eventDate) {
+        setInterval(updateCountdown, 1000);
+        updateCountdown();
     }
 </script>
 {% endblock %}

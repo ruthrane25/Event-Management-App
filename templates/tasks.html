@@ -1,0 +1,154 @@
+{% extends 'base.html' %}
+{% block title %}Tasks — {{ event.name }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb"><a href="{{ url_for('dashboard') }}">Dashboard</a> / <a
+                href="{{ url_for('event_dashboard', event_id=event.id) }}">{{ event.name }}</a> / Tasks</div>
+        <h1 class="page-title"><i class="fas fa-tasks"></i> Event Planning Checklist</h1>
+    </div>
+</div>
+
+<div class="event-nav">
+    <a href="{{ url_for('event_dashboard', event_id=event.id) }}" class="event-nav-item">
+        <i class="fas fa-tachometer-alt"></i> Dashboard
+    </a>
+    <a href="{{ url_for('guests', event_id=event.id) }}" class="event-nav-item">
+        <i class="fas fa-users"></i> Guests
+    </a>
+    <a href="{{ url_for('tasks', event_id=event.id) }}" class="event-nav-item active">
+        <i class="fas fa-tasks"></i> Tasks
+    </a>
+    <a href="{{ url_for('itinerary', event_id=event.id) }}" class="event-nav-item">
+        <i class="fas fa-clock"></i> Itinerary
+    </a>
+    <a href="{{ url_for('stay', event_id=event.id) }}" class="event-nav-item">
+        <i class="fas fa-bed"></i> Stay
+    </a>
+    {% if is_admin %}
+    <a href="{{ url_for('travel', event_id=event.id) }}" class="event-nav-item">
+        <i class="fas fa-train"></i> Travel
+    </a>
+    {% endif %}
+    <a href="{{ url_for('notifications', event_id=event.id) }}" class="event-nav-item">
+        <i class="fas fa-bell"></i> Notifications
+    </a>
+</div>
+
+<div class="task-summary-card card">
+    <div class="progress-container">
+        <h3 class="progress-label">Overall Progress</h3>
+        <span class="progress-percent">{{ progress|round|int }}%</span>
+    </div>
+    <div class="progress-bar-bg">
+        <div class="progress-fill" id="taskProgressFill"></div>
+    </div>
+</div>
+
+<div class="section-toolbar">
+    <h2 class="section-title">Pending Tasks ({{ pending_tasks|length }})</h2>
+    {% if is_admin or member.role == 'manager' %}
+    <form action="{{ url_for('add_task', event_id=event.id) }}" method="POST" style="display: flex; gap: 10px; width: 100%; max-width: 400px;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <input type="text" name="title" class="form-input" placeholder="e.g. Confirm catering menu..." required style="margin: 0;">
+        <button type="submit" class="btn btn-primary" style="white-space: nowrap;">
+            <i class="fas fa-plus"></i> Add
+        </button>
+    </form>
+    {% endif %}
+</div>
+
+<div class="tasks-list">
+    {% for task in pending_tasks %}
+    <div class="task-card" id="task-{{ task._id }}">
+        <div class="task-check" onclick="toggleTask('{{ task._id }}')">
+            <i class="far fa-circle"></i>
+        </div>
+        <div class="task-title">{{ task.title }}</div>
+        {% if is_admin or member.role == 'manager' %}
+        <button class="icon-btn red" onclick="deleteTask('{{ task._id }}')" style="margin-left: auto;">
+            <i class="fas fa-trash"></i>
+        </button>
+        {% endif %}
+    </div>
+    {% endfor %}
+
+    {% if not pending_tasks %}
+    <div class="empty-state small">
+        <div class="empty-icon"><i class="fas fa-check-double"></i></div>
+        <p>All caught up! No pending tasks.</p>
+    </div>
+    {% endif %}
+</div>
+
+{% if completed_tasks %}
+<div class="section-toolbar" style="margin-top: 40px; opacity: 0.7;">
+    <h2 class="section-title">Completed tasks ({{ completed_tasks|length }})</h2>
+</div>
+<div class="tasks-list completed">
+    {% for task in completed_tasks %}
+    <div class="task-card completed" id="task-{{ task._id }}">
+        <div class="task-check checked" onclick="toggleTask('{{ task._id }}')">
+            <i class="fas fa-check-circle"></i>
+        </div>
+        <div class="task-title">{{ task.title }}</div>
+        {% if is_admin or member.role == 'manager' %}
+        <button class="icon-btn red" onclick="deleteTask('{{ task._id }}')" style="margin-left: auto;">
+            <i class="fas fa-trash"></i>
+        </button>
+        {% endif %}
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+<style>
+.task-summary-card { margin-bottom: 30px; padding: 25px; }
+.progress-container { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+.progress-label { margin: 0; font-size: 1.1rem; }
+.progress-percent { font-weight: 700; color: var(--primary); }
+.progress-bar-bg { height: 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.progress-fill { height: 100%; background: linear-gradient(90deg, var(--primary), var(--secondary)); transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1); }
+.tasks-list { display: flex; flex-direction: column; gap: 12px; margin-top: 15px; }
+.task-card {
+    display: flex; align-items: center; gap: 15px;
+    background: var(--bg-card); border: 1px solid var(--border);
+    padding: 15px 20px; border-radius: var(--radius);
+    transition: var(--transition);
+}
+.task-card:hover { border-color: var(--primary-soft); transform: translateX(5px); }
+.task-check { cursor: pointer; font-size: 1.3rem; color: var(--text-muted); transition: scale 0.2s; }
+.task-check:hover { scale: 1.2; color: var(--primary); }
+.task-check.checked i { color: var(--primary); }
+.task-title { font-weight: 600; font-size: 0.95rem; color: var(--text-primary); }
+.task-card.completed { opacity: 0.6; }
+.task-card.completed .task-title { text-decoration: line-through; }
+</style>
+
+<script>
+// Set progress bar width
+document.getElementById('taskProgressFill').style.width = '{{ progress }}%';
+
+async function toggleTask(tid) {
+    try {
+        const res = await fetch(`/event/{{ event.id }}/tasks/${tid}/toggle`, { method: 'POST' });
+        const data = await res.json();
+        if(data.success) location.reload();
+    } catch(e) { showToast('Error toggling task', 'error'); }
+}
+
+async function deleteTask(tid) {
+    if(!confirm('Delete this task?')) return;
+    try {
+        const res = await fetch(`/event/{{ event.id }}/tasks/${tid}/delete`, { method: 'POST' });
+        const data = await res.json();
+        if(data.success) {
+            document.getElementById(`task-${tid}`).style.opacity = '0';
+            document.getElementById(`task-${tid}`).style.transform = 'scale(0.9)';
+            setTimeout(() => location.reload(), 300);
+        }
+    } catch(e) { showToast('Error deleting task', 'error'); }
+}
+</script>
+{% endblock %}

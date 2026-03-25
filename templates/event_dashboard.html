@@ -48,7 +48,38 @@
         background: var(--secondary);
         color: white;
     }
+    /* Countdown Styles */
+    .countdown-widget {
+        display: flex;
+        gap: 12px;
+        margin-top: 15px;
+        flex-wrap: wrap;
+    }
+    .countdown-item {
+        background: rgba(99, 102, 241, 0.1);
+        border: 1px solid rgba(99, 102, 241, 0.2);
+        padding: 10px;
+        border-radius: 10px;
+        min-width: 70px;
+        text-align: center;
+        backdrop-filter: blur(5px);
+    }
+    .countdown-value {
+        display: block;
+        font-size: 1.5rem;
+        font-weight: 800;
+        color: var(--primary);
+        line-height: 1;
+    }
+    .countdown-label {
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        color: var(--text-secondary);
+        font-weight: 600;
+    }
 </style>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 {% endblock %}
 
 {% block scripts %}
@@ -180,9 +211,96 @@
 
     document.addEventListener('DOMContentLoaded', () => {
         checkUnread();
+        initAnalytics();
         setInterval(checkUnread, 30000); // Check every 30s
     });
 
+    // Initialize Dashboard Analytics
+    async function initAnalytics() {
+        try {
+            const res = await fetch(`/api/event/{{ event.id }}/analytics`);
+            const data = await res.json();
+            
+            const chartOptions = {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'right', labels: { color: '#9898c8', font: {family: 'Inter'} } }
+                }
+            };
+            
+            // Budget Doughnut
+            const budgetContainer = document.getElementById('budgetChart');
+            if (data.budget && data.budget.data.length > 0) {
+                new Chart(budgetContainer, {
+                    type: 'doughnut',
+                    data: {
+                        labels: data.budget.labels,
+                        datasets: [{
+                            data: data.budget.data,
+                            backgroundColor: ['#6366f1', '#06b6d4', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6'],
+                            borderWidth: 2,
+                            borderColor: '#17172a'
+                        }]
+                    },
+                    options: chartOptions
+                });
+            } else if (budgetContainer) {
+                budgetContainer.parentElement.innerHTML = '<div class="empty-state small" style="margin-top:20px; padding:0"><div class="empty-icon"><i class="fas fa-receipt"></i></div><p style="font-size:0.85rem">No expenses yet.</p></div>';
+            }
+
+            // Food Pie
+            const foodContainer = document.getElementById('foodChart');
+            if (data.food && data.food.data.length > 0) {
+                new Chart(foodContainer, {
+                    type: 'pie',
+                    data: {
+                        labels: data.food.labels,
+                        datasets: [{
+                            data: data.food.data,
+                            backgroundColor: ['#22c55e', '#ef4444', '#f59e0b'],
+                            borderWidth: 2,
+                            borderColor: '#17172a'
+                        }]
+                    },
+                    options: chartOptions
+                });
+            } else if (foodContainer) {
+                foodContainer.parentElement.innerHTML = '<div class="empty-state small" style="margin-top:20px; padding:0"><div class="empty-icon"><i class="fas fa-utensils"></i></div><p style="font-size:0.85rem">No RSVPs yet.</p></div>';
+            }
+        } catch(e) { console.error('Analytics load error:', e); }
+    }
+
+    // Countdown Logic
+    const eventDate = "{{ event.date }}";
+    function updateCountdown() {
+        if (!eventDate) return;
+        const target = new Date(eventDate).getTime();
+        const now = new Date().getTime();
+        const diff = target - now;
+
+        if (diff <= 0) {
+            const container = document.getElementById('countdownWidget');
+            if (container) container.innerHTML = '<div class="countdown-item" style="width:100%"><span class="countdown-value">Event is Live!</span></div>';
+            return;
+        }
+
+        const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+        const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+        const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+        const secs = Math.floor((diff % (1000 * 60)) / 1000);
+
+        document.getElementById('cd-days').textContent = days.toString().padStart(2, '0');
+        document.getElementById('cd-hours').textContent = hours.toString().padStart(2, '0');
+        document.getElementById('cd-mins').textContent = mins.toString().padStart(2, '0');
+        document.getElementById('cd-secs').textContent = secs.toString().padStart(2, '0');
+    }
+
+    if (eventDate) {
+        setInterval(updateCountdown, 1000);
+        updateCountdown();
+    }
+    
     async function sendReminders() {
         if (!confirm('Send a massive email reminder to all users for their guests?')) return;
         
@@ -252,7 +370,7 @@
                     <i class="fas fa-copy"></i> Copy
                 </button>
                 <button class="share-btn" onclick="openShareModal()">
-                    <i class="fas fa-paper-plane"></i> Share via Email
+                    <i class="fas fa-user-plus"></i> Invite
                 </button>
                 {% if is_admin %}
                 <button class="share-btn" onclick="sendReminders()" id="remindersBtn" style="color:var(--primary); border-color:var(--primary-soft)">
@@ -279,6 +397,9 @@
     <a href="{{ url_for('guests', event_id=event.id) }}" class="event-nav-item">
         <i class="fas fa-users"></i> Guests
     </a>
+    <a href="{{ url_for('tasks', event_id=event.id) }}" class="event-nav-item">
+        <i class="fas fa-tasks"></i> Tasks
+    </a>
     <a href="{{ url_for('itinerary', event_id=event.id) }}" class="event-nav-item">
         <i class="fas fa-clock"></i> Itinerary
     </a>
@@ -297,6 +418,26 @@
         <i class="fas fa-bell"></i> Notifications
         <span class="nav-badge hidden" id="unreadBadge">0</span>
     </a>
+</div>
+
+<!-- Analytics Dashboard -->
+<div class="stats-row" style="margin-top: 24px; margin-bottom: 24px;">
+    <div class="card" style="padding: 20px;">
+        <h3 style="margin-bottom:15px; font-size: 1.05rem; display:flex; align-items:center; gap:8px;">
+            <i class="fas fa-chart-pie" style="color:var(--primary)"></i> Budget Breakdown
+        </h3>
+        <div style="position: relative; height: 200px; width: 100%;">
+            <canvas id="budgetChart"></canvas>
+        </div>
+    </div>
+    <div class="card" style="padding: 20px;">
+        <h3 style="margin-bottom:15px; font-size: 1.05rem; display:flex; align-items:center; gap:8px;">
+            <i class="fas fa-utensils" style="color:var(--primary)"></i> Meal Preferences
+        </h3>
+        <div style="position: relative; height: 200px; width: 100%;">
+            <canvas id="foodChart"></canvas>
+        </div>
+    </div>
 </div>
 
 <!-- Tabs -->
