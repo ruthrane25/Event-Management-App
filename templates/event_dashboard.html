@@ -334,89 +334,6 @@
             btn.innerHTML = originalHtml;
         }
     }
-
-    // AI Draft Logic
-    function openAiDraftModal() {
-        document.getElementById('aiDraftModal').classList.remove('hidden');
-    }
-    function closeAiDraftModal() {
-        document.getElementById('aiDraftModal').classList.add('hidden');
-    }
-
-    let currentAiHtml = '';
-
-    async function generateAiDraft() {
-        const name = document.getElementById('aiRecipientName').value.trim();
-        const vibe = document.getElementById('aiVibe').value;
-        const btn = document.getElementById('aiGenerateBtn');
-        const preview = document.getElementById('aiPreviewArea');
-        
-        btn.disabled = true;
-        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> RootBot is thinking...';
-        preview.innerHTML = '<div style="height: 100%; display: flex; align-items: center; justify-content: center;"><i class="fas fa-robot fa-spin fa-2x" style="color:var(--primary)"></i></div>';
-
-        try {
-            const res = await fetch(`/api/event/{{ event.id }}/ai-draft-invite`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ recipient_name: name, vibe: vibe })
-            });
-            const data = await res.json();
-            if(data.html) {
-                currentAiHtml = data.html;
-                // Create an iframe to safely render the HTML draft
-                const iframe = document.createElement('iframe');
-                iframe.style.width = '100%';
-                iframe.style.height = '100%';
-                iframe.style.border = 'none';
-                preview.innerHTML = '';
-                preview.appendChild(iframe);
-                iframe.contentWindow.document.open();
-                iframe.contentWindow.document.write(data.html);
-                iframe.contentWindow.document.close();
-                
-                document.getElementById('aiSendBtn').classList.remove('hidden');
-                btn.innerHTML = '<i class="fas fa-sync-alt"></i> Regenerate';
-            } else {
-                showToast(data.error || 'Failed to generate draft', 'error');
-                btn.innerHTML = '<i class="fas fa-sync-alt"></i> Try Again';
-            }
-        } catch(e) {
-            showToast('Generation error', 'error');
-            btn.innerHTML = '<i class="fas fa-sync-alt"></i> Try Again';
-        } finally {
-            btn.disabled = false;
-        }
-    }
-
-    async function sendAiInvitation() {
-        const email = document.getElementById('aiRecipientEmail').value.trim();
-        if(!email) return showToast('Please enter recipient email', 'error');
-        
-        const btn = document.getElementById('aiSendBtn');
-        btn.disabled = true;
-        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending...';
-
-        try {
-            const res = await fetch(`/api/event/{{ event.id }}/ai-send-invitation`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email: email, html_body: currentAiHtml })
-            });
-            const data = await res.json();
-            if(data.success) {
-                showToast('Invitation sent successfully!', 'success');
-                closeAiDraftModal();
-            } else {
-                showToast(data.error || 'Failed to send', 'error');
-            }
-        } catch(e) {
-            showToast('Network error', 'error');
-        } finally {
-            btn.disabled = false;
-            btn.innerHTML = '<i class="fas fa-paper-plane"></i> Send This Email';
-        }
-    }
 </script>
 
 <!-- Share Code Modal -->
@@ -447,55 +364,6 @@
         </div>
     </div>
 </div>
-
-<!-- AI Draft Invitation Modal -->
-<div class="modal-overlay hidden" id="aiDraftModal">
-    <div class="modal" style="max-width: 700px; width: 90%;">
-        <div class="modal-header">
-            <h3><i class="fas fa-magic"></i> RootBot AI Invitation Draft</h3>
-            <button class="modal-close" onclick="closeAiDraftModal()"><i class="fas fa-times"></i></button>
-        </div>
-        <div class="modal-body">
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px;">
-                <div class="form-group">
-                    <label class="form-label">Recipient Name</label>
-                    <input type="text" class="form-input" id="aiRecipientName" placeholder="e.g. Alex Smith">
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Invitation Vibe</label>
-                    <select class="form-input" id="aiVibe">
-                        <option value="Elegant & Formal">Elegant & Formal</option>
-                        <option value="Fun & Casual">Fun & Casual</option>
-                        <option value="Whimsical & Creative">Whimsical & Creative</option>
-                        <option value="Direct & Minimalist">Direct & Minimalist</option>
-                    </select>
-                </div>
-            </div>
-            
-            <label class="form-label">Email Preview</label>
-            <div id="aiPreviewArea" style="background: #f8fafc; border: 1px solid var(--border); border-radius: 12px; height: 350px; overflow-y: auto; padding: 0; margin-bottom: 15px;">
-                <div style="height: 100%; display: flex; align-items: center; justify-content: center; color: var(--text-muted); flex-direction: column; gap: 10px;">
-                    <i class="fas fa-wand-sparkles fa-2x"></i>
-                    <p>Your AI-crafted invitation will appear here...</p>
-                </div>
-            </div>
-
-            <div class="form-group">
-                <label class="form-label">Recipient Email</label>
-                <input type="email" class="form-input" id="aiRecipientEmail" placeholder="friend@example.com">
-            </div>
-        </div>
-        <div class="modal-footer">
-            <button class="btn btn-ghost" onclick="closeAiDraftModal()">Cancel</button>
-            <button class="btn btn-secondary" id="aiGenerateBtn" onclick="generateAiDraft()">
-                <i class="fas fa-sync-alt"></i> Generate Draft
-            </button>
-            <button class="btn btn-primary hidden" id="aiSendBtn" onclick="sendAiInvitation()">
-                <i class="fas fa-paper-plane"></i> Send This Email
-            </button>
-        </div>
-    </div>
-</div>
 {% endblock %}
 
 {% block content %}
@@ -513,9 +381,6 @@
                 </button>
                 <button class="share-btn" onclick="openShareModal()">
                     <i class="fas fa-user-plus"></i> Invite
-                </button>
-                <button class="share-btn" onclick="openAiDraftModal()" style="background: rgba(99, 102, 241, 0.1); border-color: var(--primary-soft); color: var(--primary);">
-                    <i class="fas fa-magic"></i> AI Draft
                 </button>
                 {% if is_admin %}
                 <button class="share-btn" onclick="sendReminders()" id="remindersBtn" style="color:var(--primary); border-color:var(--primary-soft)">

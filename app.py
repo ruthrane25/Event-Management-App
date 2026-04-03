@@ -16,7 +16,6 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 from flask_talisman import Talisman
 from flask_wtf.csrf import CSRFProtect
 from google import genai
-from google.genai import types
 
 load_dotenv()
 
@@ -1402,67 +1401,6 @@ def send_notification(event_id):
 
     return jsonify({'success': True, 'emails_sent': sent_emails})
 
-@app.route('/api/event/<event_id>/ai-draft-invite', methods=['POST'])
-@login_required
-def ai_draft_invite(event_id):
-    if not ObjectId.is_valid(event_id): return jsonify({"error": "Invalid ID"}), 400
-    if not is_member(event_id, current_user.id): return jsonify({"error": "Unauthorized"}), 403
-    
-    event = db.events.find_one({"_id": ObjectId(event_id)})
-    data = request.json
-    recipient = data.get('recipient_name', 'Guest')
-    vibe = data.get('vibe', 'Elegant & Formal')
-    
-    prompt = f"""
-    You are a premium event invitation designer for the 'EventFlow' platform.
-    Generate a BEAUTIFUL, RESPONSIVE, and PROFESSIONAL HTML email invitation.
-    
-    EVENT DETAILS:
-    - Event Name: {event.get('name')}
-    - Date: {event.get('date')}
-    - Unique Joining Code: {event.get('unique_code')}
-    - Inviter: {current_user.name}
-    - Recipient: {recipient}
-    - Requested Vibe: {vibe}
-    
-    CRITICAL DESIGN RULES:
-    1. Output ONLY the raw HTML code (starting with <!DOCTYPE html>). No markdown, no triple backticks.
-    2. Use a modern, dark-themed aesthetic (background: #0f172a) with vibrant gradients (#6366f1 to #a855f7).
-    3. Include CSS in a <style> block. Use Google Font 'Inter' or sans-serif.
-    4. The email MUST feature the joining code '{event.get('unique_code')}' prominently in a styled box.
-    5. Include a call-to-action button that says 'Join Event'.
-    6. Ensure the tone matches the requested vibe: {vibe}.
-    7. Make sure it looks like a premium, state-of-the-art invitation.
-    """
-    
-    try:
-        response = gemini_client.models.generate_content(
-            model='gemini-2.0-flash',
-            contents=prompt,
-        )
-        # Clean up any potential markdown residue
-        html = response.text.replace('```html', '').replace('```', '').strip()
-        return jsonify({"html": html})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/api/event/<event_id>/ai-send-invitation', methods=['POST'])
-@login_required
-def ai_send_invitation(event_id):
-    if not is_member(event_id, current_user.id): return jsonify({"error": "Unauthorized"}), 403
-    data = request.json
-    email = data.get('email')
-    html_body = data.get('html_body')
-    
-    if not email or not html_body:
-        return jsonify({"error": "Missing email or content"}), 400
-        
-    event = db.events.find_one({"_id": ObjectId(event_id)})
-    subject = f"You're invited to {event.get('name')}!"
-    
-    success = send_notification_email(email, subject, html_body)
-    return jsonify({"success": success})
-
 @app.route('/event/<event_id>/notifications/mark-read', methods=['POST'])
 @login_required
 def mark_notifications_read(event_id):
@@ -1818,52 +1756,7 @@ def event_analytics(event_id):
     })
 
 # ─────────────────────────────────────────────
-#  AI CHATBOT (RootBot) - TOOL DEFINITIONS
-# ─────────────────────────────────────────────
-
-def get_guest_summary(event_id: str):
-    """Returns guest RSVP counts, food preferences, and a list of all attending guests."""
-    if not ObjectId.is_valid(event_id): return {"error": "Invalid Event ID"}
-    guests = list(db.guests.find({"event_id": ObjectId(event_id)}))
-    total = len(guests)
-    coming = len([g for g in guests if g.get('coming_status') == 'coming'])
-    pending = len([g for g in guests if g.get('coming_status') == 'pending'])
-    veg = len([g for g in guests if g.get('food_preference') == 'Veg'])
-    non_veg = len([g for g in guests if g.get('food_preference') == 'Non-veg'])
-    names = [g.get('name') for g in guests]
-    return {
-        "status_summary": {"total": total, "attending": coming, "pending": pending},
-        "food_split": {"veg": veg, "non_veg": non_veg},
-        "all_guest_names": names
-    }
-
-def get_expense_summary(event_id: str):
-    """Returns total spent and a breakdown of costs per category."""
-    if not ObjectId.is_valid(event_id): return {"error": "Invalid Event ID"}
-    pipeline = [
-        {"$match": {"event_id": ObjectId(event_id)}},
-        {"$group": {"_id": "$category", "total": {"$sum": "$amount"}}}
-    ]
-    data = list(db.expenses.aggregate(pipeline))
-    total_spent = sum(item['total'] for item in data)
-    breakdown = {item['_id']: item['total'] for item in data}
-    return {"total_spent": round(total_spent, 2), "breakdown": breakdown}
-
-def get_event_itinerary(event_id: str):
-    """Returns the full schedule of events for this specific event."""
-    if not ObjectId.is_valid(event_id): return {"error": "Invalid Event ID"}
-    items = list(db.itinerary.find({"event_id": ObjectId(event_id)}).sort("date", 1))
-    return [{"time": i.get('time'), "date": i.get('date'), "title": i.get('title'), "location": i.get('location')} for i in items]
-
-def get_tasks_progress(event_id: str):
-    """Returns count of completed versus pending tasks."""
-    if not ObjectId.is_valid(event_id): return {"error": "Invalid Event ID"}
-    total = db.tasks.count_documents({"event_id": ObjectId(event_id)})
-    done = db.tasks.count_documents({"event_id": ObjectId(event_id), "status": "completed"})
-    return {"total_tasks": total, "completed": done, "pending": total - done}
-
-# ─────────────────────────────────────────────
-#  AI CHATBOT (RootBot) - ROUTES
+#  AI CHATBOT (RootBot)
 # ─────────────────────────────────────────────
 
 @app.route('/api/chat/history', methods=['GET'])
@@ -1879,8 +1772,6 @@ def get_chat_history():
 def api_chat():
     data = request.get_json()
     user_message = data.get('message', '').strip()
-    event_id = data.get('event_id')
-    
     if not user_message:
         return jsonify({'error': 'No message provided'}), 400
         
@@ -1891,85 +1782,36 @@ def api_chat():
         history_doc = db.chat_history.find_one({"user_id": ObjectId(current_user.id)})
         messages = history_doc.get("messages", []) if history_doc else []
         
-        # Prepare context for Gemini
-        event_context = ""
-        if event_id and ObjectId.is_valid(event_id):
-            event = db.events.find_one({"_id": ObjectId(event_id)})
-            if event:
-                event_context = f"\nCURRENT CONTEXT: You are assisting with the event '{event.get('name')}'. The Event ID is '{event_id}'."
-
+        conversation_text = ""
+        for msg in messages[-20:]:
+            prefix = "User" if msg['role'] == 'user' else "RootBot"
+            conversation_text += f"{prefix}: {msg['text']}\n"
+            
         system_instruction = (
-            "You are RootBot, the powerful AI Data Agent for EventFlow. "
-            "You have access to live database tools to answer questions about guests, expenses, tasks, and the itinerary."
-            f"{event_context}\n"
-            "**CORE CAPABILITIES:** "
-            "- Use 'get_guest_summary' for RSVP and food preferences. "
-            "- Use 'get_expense_summary' for budget and category spending. "
-            "- Use 'get_event_itinerary' for the schedule. "
-            "- Use 'get_tasks_progress' for the checklist status. "
-            "**STRICT RULES:** "
-            "1. ONLY answer questions based on the data retrieved from tools or the predefined EventFlow features. "
-            "2. If an 'event_id' is provided in your context, always use it as the argument for your tools. "
-            "3. If NO event is in context, ask the user to navigate to an event page so you can help with specific data. "
-            "4. Never hallucinate features. "
-            "Keep answers professional, helpful, and concise."
+            "You are RootBot, the friendly AI assistant for EventFlow. "
+            "EventFlow is a web platform with explicitly limited core features: "
+            "1. Event Dashboard: View events, pending requests, and basic stats. "
+            "2. Guests & RSVPs: Manually add guests (name, email), manage families, meal preferences, and approve RSVPs. Exporting to CSV is supported. "
+            "3. Expenses & Travel: Track costs, budgets, and map out accommodations. "
+            "4. Tasks: Create sprints and task items. "
+            "**CRITICAL RULES FOR ROOTBOT:** "
+            "- YOU MUST NEVER invent or suggest features that do not exist in the exact list above (such as Bulk Importing via CSV, APIs, integrations, etc.). "
+            "- If the user asks how to do something outside these core features (like 'How do I bulk import?'), politely inform them that EventFlow does not currently support that feature. "
+            "- Keep answers concise, and securely focused on the platform."
         )
-
-        # Map MongoDB history to Gemini Content format
-        contents = []
-        for msg in messages[-10:]: # Last 10 messages for context
-            role = 'user' if msg['role'] == 'user' else 'model'
-            contents.append(types.Content(role=role, parts=[types.Part(text=msg['text'])]))
         
-        # Append the current message
-        contents.append(types.Content(role='user', parts=[types.Part(text=user_message)]))
-
-        # Tool mapping
-        tool_map = {
-            "get_guest_summary": get_guest_summary,
-            "get_expense_summary": get_expense_summary,
-            "get_event_itinerary": get_event_itinerary,
-            "get_tasks_progress": get_tasks_progress
-        }
-
-        # Generate content with tools
+        prompt = f"SYSTEM INSTRUCTION: {system_instruction}\n\n"
+        if conversation_text:
+            prompt += f"PREVIOUS CHAT CONTEXT:\n{conversation_text}\n"
+            
+        prompt += f"User: {user_message}\nRootBot:"
+        
         response = gemini_client.models.generate_content(
-            model='gemini-2.0-flash',
-            contents=contents,
-            config=types.GenerateContentConfig(
-                system_instruction=system_instruction,
-                tools=[get_guest_summary, get_expense_summary, get_event_itinerary, get_tasks_progress]
-            )
+            model='gemini-2.5-flash',
+            contents=prompt
         )
-
-        # Handle Function Calling Loop
-        # For simplicity, we handle one level of tool calling which is usually enough for these queries
-        if response.candidates[0].content.parts[0].function_call:
-            call = response.candidates[0].content.parts[0].function_call
-            if call.name in tool_map:
-                # Execute the local function
-                tool_result = tool_map[call.name](**call.args)
-                
-                # Send result back to Gemini
-                contents.append(response.candidates[0].content) # Add the model's call
-                contents.append(types.Content(
-                    role='tool',
-                    parts=[types.Part(function_response=types.FunctionResponse(
-                        name=call.name,
-                        response={"result": tool_result}
-                    ))]
-                ))
-                
-                # Final response
-                response = gemini_client.models.generate_content(
-                    model='gemini-2.0-flash',
-                    contents=contents,
-                    config=types.GenerateContentConfig(system_instruction=system_instruction)
-                )
-
         text_response = response.text
         
-        # Save to DB
         new_messages = [
             {"role": "user", "text": user_message},
             {"role": "bot", "text": text_response}
@@ -1985,12 +1827,9 @@ def api_chat():
         )
         
         return jsonify({'reply': text_response})
-
     except Exception as e:
-        print(f"RootBot Logic Error: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({'error': 'I encountered an error while processing your request.'}), 500
+        print(f"Gemini API Error: {e}")
+        return jsonify({'error': 'Sorry, I am having trouble connecting to my brain right now.'}), 500
 
 if __name__ == '__main__':
     print('\n  [OK]  EventFlow is running at http://127.0.0.1:5000\n')
