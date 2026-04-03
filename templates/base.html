@@ -564,6 +564,14 @@
         const messagesBox = document.getElementById('chatMessages');
         const sendBtn = document.getElementById('chatSendBtn');
 
+        // Extract event_id from URL if on an event-specific page
+        const pathParts = window.location.pathname.split('/');
+        let eventId = null;
+        const eIdx = pathParts.indexOf('event');
+        if (eIdx !== -1 && pathParts[eIdx + 1]) {
+            eventId = pathParts[eIdx + 1];
+        }
+
         // Append User Message
         const userDiv = document.createElement('div');
         userDiv.className = 'chat-msg user';
@@ -587,10 +595,9 @@
             const res = await fetch('/api/chat', {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json',
-                    // X-CSRFToken is auto-handled by our fetch wrapper if applicable
+                    'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({ message: msg })
+                body: JSON.stringify({ message: msg, event_id: eventId })
             });
             const data = await res.json();
             
