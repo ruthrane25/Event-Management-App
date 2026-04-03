@@ -15,8 +15,14 @@ from dotenv import load_dotenv
 from werkzeug.middleware.proxy_fix import ProxyFix
 from flask_talisman import Talisman
 from flask_wtf.csrf import CSRFProtect
+import google.generativeai as genai
 
 load_dotenv()
+
+try:
+    genai.configure(api_key=os.environ.get('GEMINI_API_KEY'))
+except Exception as e:
+    print(f"[WARNING] Gemini API not configured: {e}")
 
 app = Flask(__name__)
 # Enable HTTPS proxy support for Vercel
@@ -1691,6 +1697,37 @@ def event_analytics(event_id):
             "data": [int(x['count']) for x in food_data]
         }
     })
+
+# ─────────────────────────────────────────────
+#  AI CHATBOT (RootBot)
+# ─────────────────────────────────────────────
+
+@app.route('/api/chat', methods=['POST'])
+# CSRF protection is handled via the global fetch wrapper or we can explicitly exempt/apply it.
+# CSRFProtect applies to all POSTs by default, which is good.
+def api_chat():
+    data = request.get_json()
+    user_message = data.get('message', '').strip()
+    if not user_message:
+        return jsonify({'error': 'No message provided'}), 400
+        
+    try:
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        system_instruction = (
+            "You are RootBot, the friendly AI assistant for EventFlow. "
+            "EventFlow is a web platform for managing events, guests, RSVPs, tasks, expenses, and travel. "
+            "Be concise, friendly, and helpful. Always greet users warmly if they say hi. "
+            "Help them figure out how to navigate the platform or answer general event planning questions."
+        )
+        prompt = system_instruction + "\n\nUser: " + user_message + "\nRootBot:"
+        
+        response = model.generate_content(prompt)
+        text_response = response.text
+        
+        return jsonify({'reply': text_response})
+    except Exception as e:
+        print(f"Gemini API Error: {e}")
+        return jsonify({'error': 'Sorry, I am having trouble connecting to my brain right now.'}), 500
 
 if __name__ == '__main__':
     print('\n  [OK]  EventFlow is running at http://127.0.0.1:5000\n')

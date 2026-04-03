@@ -437,6 +437,120 @@
         }
     });
 </script>
+<!-- RootBot UI -->
+<div class="chat-widget-btn" id="chatWidgetBtn" onclick="toggleChat()">
+    <i class="fas fa-robot"></i>
+</div>
+
+<div class="chat-window" id="chatWindow">
+    <div class="chat-header">
+        <h4><i class="fas fa-robot" style="color:var(--primary);"></i> RootBot</h4>
+        <button class="chat-close" onclick="toggleChat()"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="chat-messages" id="chatMessages">
+        <!-- Initial Greeting -->
+        <div class="chat-msg bot">Hi! How can I help you manage your events today?</div>
+    </div>
+    <div class="chat-input-area">
+        <input type="text" class="chat-input" id="chatInput" placeholder="Ask RootBot a question..." onkeypress="handleChatKey(event)" autocomplete="off">
+        <button class="chat-send-btn" id="chatSendBtn" onclick="sendChatMessage()">
+            <i class="fas fa-paper-plane"></i>
+        </button>
+    </div>
+</div>
+
+<script>
+    let isChatOpen = false;
+
+    function toggleChat() {
+        isChatOpen = !isChatOpen;
+        const chatWindow = document.getElementById('chatWindow');
+        const icon = document.querySelector('#chatWidgetBtn i');
+        
+        if(isChatOpen) {
+            chatWindow.classList.add('active');
+            icon.classList.remove('fa-robot');
+            icon.classList.add('fa-times');
+            setTimeout(() => document.getElementById('chatInput').focus(), 300);
+        } else {
+            chatWindow.classList.remove('active');
+            icon.classList.remove('fa-times');
+            icon.classList.add('fa-robot');
+        }
+    }
+
+    function handleChatKey(e) {
+        if(e.key === 'Enter') sendChatMessage();
+    }
+
+    async function sendChatMessage() {
+        const input = document.getElementById('chatInput');
+        const msg = input.value.trim();
+        if(!msg) return;
+
+        const messagesBox = document.getElementById('chatMessages');
+        const sendBtn = document.getElementById('chatSendBtn');
+
+        // Append User Message
+        const userDiv = document.createElement('div');
+        userDiv.className = 'chat-msg user';
+        userDiv.textContent = msg;
+        messagesBox.appendChild(userDiv);
+        
+        input.value = '';
+        input.disabled = true;
+        sendBtn.disabled = true;
+        messagesBox.scrollTop = messagesBox.scrollHeight;
+
+        // Append Typing Indicator
+        const typingDiv = document.createElement('div');
+        typingDiv.className = 'chat-msg bot typing-indicator';
+        typingDiv.id = 'typingIndicator';
+        typingDiv.innerHTML = '<span></span><span></span><span></span>';
+        messagesBox.appendChild(typingDiv);
+        messagesBox.scrollTop = messagesBox.scrollHeight;
+
+        try {
+            const res = await fetch('/api/chat', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    // X-CSRFToken is auto-handled by our fetch wrapper if applicable
+                },
+                body: JSON.stringify({ message: msg })
+            });
+            const data = await res.json();
+            
+            document.getElementById('typingIndicator').remove();
+            
+            if(data.reply) {
+                const botDiv = document.createElement('div');
+                botDiv.className = 'chat-msg bot';
+                // Very basic MD rendering: replace returns with breaks
+                botDiv.innerHTML = data.reply.replace(/\ng/, "<br>");
+                messagesBox.appendChild(botDiv);
+            } else {
+                if (typeof showToast === 'function') {
+                    showToast(data.error || 'RootBot encountered an error.', 'error');
+                } else {
+                    alert(data.error || 'An error occurred.');
+                }
+            }
+        } catch(e) {
+            if(document.getElementById('typingIndicator')) document.getElementById('typingIndicator').remove();
+            if (typeof showToast === 'function') {
+                showToast('Network error while talking to RootBot.', 'error');
+            } else {
+                alert('Network error.');
+            }
+        } finally {
+            input.disabled = false;
+            sendBtn.disabled = false;
+            input.focus();
+            messagesBox.scrollTop = messagesBox.scrollHeight;
+        }
+    }
+</script>
 {% block scripts %}{% endblock %}
 </body>
 </html>
