@@ -460,6 +460,7 @@
     </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <script>
     let isChatOpen = localStorage.getItem('rootbot_open') === 'true';
     let chatHistoryLoaded = false;
@@ -510,7 +511,11 @@
                     data.messages.forEach(msg => {
                         const div = document.createElement('div');
                         div.className = 'chat-msg ' + (msg.role === 'user' ? 'user' : 'bot');
-                        div.innerHTML = msg.text.replace(/\n/g, "<br>");
+                        if (msg.role === 'bot') {
+                            div.innerHTML = marked.parse(msg.text);
+                        } else {
+                            div.textContent = msg.text;
+                        }
                         messagesBox.appendChild(div);
                     });
                     messagesBox.scrollTop = messagesBox.scrollHeight;
@@ -566,8 +571,7 @@
             if(data.reply) {
                 const botDiv = document.createElement('div');
                 botDiv.className = 'chat-msg bot';
-                // Very basic MD rendering: replace returns with breaks
-                botDiv.innerHTML = data.reply.replace(/\ng/, "<br>");
+                botDiv.innerHTML = marked.parse(data.reply);
                 messagesBox.appendChild(botDiv);
             } else {
                 if (typeof showToast === 'function') {

@@ -2425,3 +2425,39 @@ body.auth-body .main-content {
     from { transform: translateY(0); opacity: 0.5; }
     to { transform: translateY(-4px); opacity: 1; }
 }
+
+/* RootBot Markdown Rendering Styles */
+.chat-msg p {
+    margin: 0 0 8px 0;
+}
+.chat-msg p:last-child {
+    margin-bottom: 0;
+}
+.chat-msg ul, .chat-msg ol {
+    margin: 4px 0 8px 20px;
+    padding: 0;
+}
+.chat-msg li {
+    margin-bottom: 4px;
+}
+.chat-msg strong {
+    font-weight: 600;
+}
+.chat-msg code {
+    background: rgba(0, 0, 0, 0.1);
+    padding: 2px 4px;
+    border-radius: 4px;
+    font-family: inherit;
+    font-size: 0.9em;
+}
+.chat-msg pre {
+    background: rgba(0, 0, 0, 0.2);
+    padding: 8px;
+    border-radius: 6px;
+    overflow-x: auto;
+    margin: 8px 0;
+}
+.chat-msg pre code {
+    background: none;
+    padding: 0;
+}
