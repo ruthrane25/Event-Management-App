@@ -74,6 +74,10 @@
         <a href="{{ url_for('export_guests', event_id=event.id) }}" class="btn btn-ghost" style="color:var(--text-secondary); border: 1px solid var(--border);">
             <i class="fas fa-file-csv"></i> Export CSV
         </a>
+        <input type="file" id="csvFileInput" accept=".csv" style="display:none;" onchange="handleCSVUpload(this)">
+        <button class="btn btn-ghost" style="border: 1px solid var(--border); color: var(--info)" onclick="document.getElementById('csvFileInput').click()">
+            <i class="fas fa-upload"></i> Import CSV
+        </button>
         <button class="btn btn-primary" onclick="openAddGuestModal()" id="addGuestBtn">
             <i class="fas fa-user-plus"></i> Add Guest
         </button>
@@ -640,10 +644,44 @@
         }
     }
 
+    async function handleCSVUpload(input) {
+        if (!input.files || !input.files[0]) return;
+        const file = input.files[0];
+        const formData = new FormData();
+        formData.append('file', file);
+        
+        showToast('Uploading CSV... please wait', 'info');
+        try {
+            const res = await fetch(`/event/${eventId}/guests/import_csv`, {
+                method: 'POST',
+                body: formData // Notice: when using FormData with fetch, omit Content-Type so browser sets correct boundary
+            });
+            const data = await res.json();
+            if (res.ok && data.success) {
+                showToast(`Successfully imported ${data.count} guests!`, 'success');
+                setTimeout(() => location.reload(), 1000);
+            } else {
+                showToast(data.error || 'Failed to import CSV', 'error');
+            }
+        } catch (e) {
+            showToast('Network error during upload', 'error');
+        }
+        input.value = ''; // Reset
+    }
+
     async function deleteGuest(btn) {
         const eid = btn.dataset.eventId;
         const guestId = btn.dataset.guestId;
-        if (!confirm('Delete this guest? This cannot be undone.')) return;
+        const ans = await Swal.fire({
+            title: 'Delete Guest?',
+            text: 'This action cannot be undone.',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#ef4444',
+            confirmButtonText: 'Yes, delete!'
+        });
+        if (!ans.isConfirmed) return;
+        
         const res = await fetch(`/event/${eid}/guests/${guestId}/delete`, { method: 'POST' });
         const data = await res.json();
         if (data.success) {

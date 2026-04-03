@@ -339,7 +339,16 @@
     }
 
     async function deletePlace(placeId) {
-        if (!confirm('Delete this accommodation and all its rooms?')) return;
+        const ans = await Swal.fire({
+            title: 'Delete Accommodation?',
+            text: 'Are you sure you want to delete this accommodation and all its rooms?',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#ef4444',
+            confirmButtonText: 'Yes, delete it!'
+        });
+        if (!ans.isConfirmed) return;
+        
         const res = await fetch(`/event/${eventId}/stay/delete-place/${placeId}`, { method: 'POST' });
         if ((await res.json()).success) {
             showToast('Accommodation deleted.', 'info');
@@ -348,7 +357,16 @@
     }
 
     async function deleteRoom(roomId) {
-        if (!confirm('Delete this room?')) return;
+        const ans = await Swal.fire({
+            title: 'Delete Room?',
+            text: 'Are you sure you want to delete this room?',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#ef4444',
+            confirmButtonText: 'Yes, delete it!'
+        });
+        if (!ans.isConfirmed) return;
+        
         const res = await fetch(`/event/${eventId}/stay/delete-room/${roomId}`, { method: 'POST' });
         if ((await res.json()).success) {
             showToast('Room deleted.', 'info');

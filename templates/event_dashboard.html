@@ -304,7 +304,15 @@
     }
     
     async function sendReminders() {
-        if (!confirm('Send a massive email reminder to all users for their guests?')) return;
+        const ans = await Swal.fire({
+            title: 'Blast Reminders?',
+            text: 'Send a massive email reminder to all users requesting them to update their guests?',
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonColor: 'var(--primary)',
+            confirmButtonText: 'Yes, send them!'
+        });
+        if (!ans.isConfirmed) return;
         
         const btn = document.getElementById('remindersBtn');
         const originalHtml = btn.innerHTML;

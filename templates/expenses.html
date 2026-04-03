@@ -172,7 +172,16 @@
 function openAddExpenseModal() { document.getElementById('addExpenseModal').classList.remove('hidden'); }
 function closeAddExpenseModal() { document.getElementById('addExpenseModal').classList.add('hidden'); }
 async function deleteExpense(itemId) {
-    if(!confirm('Delete this expense record?')) return;
+    const ans = await Swal.fire({
+        title: 'Delete Expense?',
+        text: 'Are you sure you want to delete this expense record?',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#ef4444',
+        confirmButtonText: 'Yes, delete'
+    });
+    if (!ans.isConfirmed) return;
+    
     const res = await fetch(`/event/{{ event.id }}/expenses/${itemId}/delete`, {method: 'POST'});
     if(res.ok) {
         document.getElementById('expense-' + itemId).remove();

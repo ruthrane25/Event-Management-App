@@ -15,6 +15,11 @@
   <link rel="apple-touch-icon" href="{{ url_for('static', filename='icon-192.png') }}"/>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}"/>
   <meta name="csrf-token" content="{{ csrf_token() }}">
+  <script>
+    const savedTheme = localStorage.getItem('theme') || 'dark';
+    if (savedTheme === 'light') document.documentElement.setAttribute('data-data-theme', 'light');
+    if (savedTheme === 'light') document.documentElement.setAttribute('data-theme', 'light');
+  </script>
   {% block head %}{% endblock %}
   {% if event and event.theme_color %}
   <style>
@@ -99,7 +104,10 @@
 }
 .dropdown-item:hover { background: var(--bg-hover); }
 </style>
-  <div class="nav-user" style="position: relative;" onclick="toggleProfileDropdown(event)">
+  <div class="nav-user" style="position: relative; display: flex; align-items: center;" onclick="toggleProfileDropdown(event)">
+    <div onclick="toggleTheme(event)" style="cursor:pointer; margin-right:15px; color:var(--text-secondary);" title="Toggle Theme">
+        <i class="fas fa-sun" id="themeIcon" style="font-size:1.2rem"></i>
+    </div>
     {% if current_user.avatar %}
     <img src="{{ current_user.avatar }}" alt="avatar" class="user-avatar bubble-hover" style="cursor:pointer;"/>
     {% else %}
@@ -461,6 +469,7 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
     let isChatOpen = localStorage.getItem('rootbot_open') === 'true';
     let chatHistoryLoaded = false;
@@ -527,6 +536,25 @@
     function handleChatKey(e) {
         if(e.key === 'Enter') sendChatMessage();
     }
+
+    function toggleTheme(e) {
+        if (e) e.stopPropagation();
+        const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
+        const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+        document.documentElement.setAttribute('data-theme', newTheme);
+        localStorage.setItem('theme', newTheme);
+        updateThemeIcon();
+    }
+
+    function updateThemeIcon() {
+        const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+        const icon = document.getElementById('themeIcon');
+        if(icon) {
+            icon.className = isLight ? 'fas fa-moon' : 'fas fa-sun';
+        }
+    }
+    document.addEventListener('DOMContentLoaded', updateThemeIcon);
+
 
     async function sendChatMessage() {
         const input = document.getElementById('chatInput');

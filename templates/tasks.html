@@ -139,7 +139,16 @@ async function toggleTask(tid) {
 }
 
 async function deleteTask(tid) {
-    if(!confirm('Delete this task?')) return;
+    const ans = await Swal.fire({
+        title: 'Delete Task?',
+        text: 'Are you sure you want to delete this task?',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#ef4444',
+        confirmButtonText: 'Yes, delete'
+    });
+    if (!ans.isConfirmed) return;
+    
     try {
         const res = await fetch(`/event/{{ event.id }}/tasks/${tid}/delete`, { method: 'POST' });
         const data = await res.json();

@@ -151,7 +151,16 @@
 function openAddItineraryModal() { document.getElementById('addItineraryModal').classList.remove('hidden'); }
 function closeAddItineraryModal() { document.getElementById('addItineraryModal').classList.add('hidden'); }
 async function deleteItinerary(itemId) {
-    if(!confirm('Delete this itinerary item?')) return;
+    const ans = await Swal.fire({
+        title: 'Delete Schedule Item?',
+        text: 'Are you sure you want to delete this itinerary item?',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#ef4444',
+        confirmButtonText: 'Yes, delete'
+    });
+    if (!ans.isConfirmed) return;
+    
     const res = await fetch(`/event/{{ event.id }}/itinerary/${itemId}/delete`, {method: 'POST'});
     if(res.ok) {
         document.getElementById('item-' + itemId).remove();

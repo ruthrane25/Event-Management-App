@@ -1406,6 +1406,54 @@ def mark_notifications_read(event_id):
     )
     return jsonify({'success': True})
 
+@app.route('/event/<event_id>/guests/import_csv', methods=['POST'])
+@login_required
+def import_guests_csv(event_id):
+    if not is_member(event_id, current_user.id):
+        return jsonify({"error": "Unauthorized"}), 403
+        
+    if 'file' not in request.files:
+        return jsonify({"error": "No file uploaded"}), 400
+        
+    file = request.files['file']
+    if not file.filename.endswith('.csv'):
+        return jsonify({"error": "Only CSV files are allowed"}), 400
+        
+    try:
+        stream = io.StringIO(file.stream.read().decode("UTF8"), newline=None)
+        reader = csv.DictReader(stream)
+        guests_to_insert = []
+        is_admin_flag = is_admin_or_manager(event_id, current_user.id)
+        
+        for row in reader:
+            name = row.get('Name', '').strip()
+            if not name: continue
+                
+            food_pref = row.get('Food Preference', 'Veg').strip()
+            if not food_pref: food_pref = 'Veg'
+            
+            is_family = row.get('Is Family', 'no').strip().lower() in ['yes', 'true', '1']
+            
+            guests_to_insert.append({
+                "event_id": ObjectId(event_id),
+                "name": name,
+                "is_family": is_family,
+                "family_members": "[]",
+                "food_preference": food_pref,
+                "coming_status": "pending",
+                "approval_status": "approved" if is_admin_flag else "pending",
+                "added_by": current_user.id,
+                "created_at": datetime.utcnow()
+            })
+            
+        if guests_to_insert:
+            db.guests.insert_many(guests_to_insert)
+            
+        return jsonify({"success": True, "count": len(guests_to_insert)})
+    except Exception as e:
+        print(f"CSV Import Error: {e}")
+        return jsonify({"error": "Failed to parse CSV file format"}), 500
+
 @app.route('/event/<event_id>/notifications/unread-count')
 @login_required
 def unread_count(event_id):
