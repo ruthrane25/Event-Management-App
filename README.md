@@ -30,10 +30,10 @@ EventFlow helps users elegantly handle everything from advanced guest list manag
 | <img src="screenshots/auth-page.png" alt="Authentication Page" width="400"/> | <img src="screenshots/dashboard.png" alt="User Dashboard" width="400"/> |
 | *Log in via Google OAuth or OTP based email verification.* | *Overview of all joined events, stats, and pending join requests.* |
 
-| 👥 **Guest List & RSVP** | 📊 **Task & Expenses Management** |
+| 👥 **Guest List & RSVP** | 🏨 **Stay Management** |
 | :---: | :---: |
-| <img src="screenshots/guests.png" alt="Guests Page" width="400"/> | <img src="screenshots/expenses.png" alt="Expenses Page" width="400"/> |
-| *Manage families, individual preferences, and shareable RSVPs.* | *Assign tasks amongst managers and track financial split costs.* |
+| <img src="screenshots/guests.png" alt="Guests Page" width="400"/> | <img src="screenshots/stay.png" alt="Stay Management Page" width="400"/> |
+| *Manage families, individual preferences, and shareable RSVPs.* | *Organize accommodations and coordinate room allocations for guests.* |
 
 ---
 
