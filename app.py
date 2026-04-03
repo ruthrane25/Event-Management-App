@@ -15,13 +15,14 @@ from dotenv import load_dotenv
 from werkzeug.middleware.proxy_fix import ProxyFix
 from flask_talisman import Talisman
 from flask_wtf.csrf import CSRFProtect
-import google.generativeai as genai
+from google import genai
 
 load_dotenv()
 
 try:
-    genai.configure(api_key=os.environ.get('GEMINI_API_KEY'))
+    gemini_client = genai.Client(api_key=os.environ.get('GEMINI_API_KEY'))
 except Exception as e:
+    gemini_client = None
     print(f"[WARNING] Gemini API not configured: {e}")
 
 app = Flask(__name__)
@@ -189,6 +190,7 @@ def init_db():
         # Create necessary indexes for PyMongo collections
         db.users.create_index("email", unique=True)
         db.events.create_index("unique_code", unique=True)
+        db.chat_history.create_index("updated_at", expireAfterSeconds=2592000) # 30 Days TTL
         return "<h1>Database Success!</h1><p>Indexes created. <a href='/login'>Go to Login</a></p>"
     except Exception as e:
         return f"<h1>Database Error</h1><p>{str(e)}</p>"
@@ -1702,9 +1704,16 @@ def event_analytics(event_id):
 #  AI CHATBOT (RootBot)
 # ─────────────────────────────────────────────
 
+@app.route('/api/chat/history', methods=['GET'])
+@login_required
+def get_chat_history():
+    history_doc = db.chat_history.find_one({"user_id": ObjectId(current_user.id)})
+    messages = history_doc.get("messages", []) if history_doc else []
+    # Send all messages excluding the instruction
+    return jsonify({'messages': messages})
+
 @app.route('/api/chat', methods=['POST'])
-# CSRF protection is handled via the global fetch wrapper or we can explicitly exempt/apply it.
-# CSRFProtect applies to all POSTs by default, which is good.
+@login_required
 def api_chat():
     data = request.get_json()
     user_message = data.get('message', '').strip()
@@ -1712,17 +1721,49 @@ def api_chat():
         return jsonify({'error': 'No message provided'}), 400
         
     try:
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        if not gemini_client:
+            return jsonify({'error': 'Gemini API not configured properly.'}), 500
+            
+        history_doc = db.chat_history.find_one({"user_id": ObjectId(current_user.id)})
+        messages = history_doc.get("messages", []) if history_doc else []
+        
+        conversation_text = ""
+        for msg in messages[-20:]:
+            prefix = "User" if msg['role'] == 'user' else "RootBot"
+            conversation_text += f"{prefix}: {msg['text']}\n"
+            
         system_instruction = (
             "You are RootBot, the friendly AI assistant for EventFlow. "
             "EventFlow is a web platform for managing events, guests, RSVPs, tasks, expenses, and travel. "
             "Be concise, friendly, and helpful. Always greet users warmly if they say hi. "
             "Help them figure out how to navigate the platform or answer general event planning questions."
         )
-        prompt = system_instruction + "\n\nUser: " + user_message + "\nRootBot:"
         
-        response = model.generate_content(prompt)
+        prompt = f"SYSTEM INSTRUCTION: {system_instruction}\n\n"
+        if conversation_text:
+            prompt += f"PREVIOUS CHAT CONTEXT:\n{conversation_text}\n"
+            
+        prompt += f"User: {user_message}\nRootBot:"
+        
+        response = gemini_client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=prompt
+        )
         text_response = response.text
+        
+        new_messages = [
+            {"role": "user", "text": user_message},
+            {"role": "bot", "text": text_response}
+        ]
+        
+        db.chat_history.update_one(
+            {"user_id": ObjectId(current_user.id)},
+            {
+                "$push": {"messages": {"$each": new_messages}},
+                "$set": {"updated_at": datetime.utcnow()}
+            },
+            upsert=True
+        )
         
         return jsonify({'reply': text_response})
     except Exception as e:

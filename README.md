@@ -45,6 +45,11 @@ EventFlow helps users elegantly handle everything from advanced guest list manag
 - **Social Login:** Quick sign-in through **Google OAuth 2.0**.
 - **Anti-Abuse:** Embedded CSRF security (`Flask-WTF`), HTTP Headers (`Flask-Talisman`), and endpoint rate-limiting (`Flask-Limiter`).
 
+### 🤖 RootBot (AI Assistant)
+- **Built-in AI Assistant:** Features a beautiful floating chatbot overlay powered by **Google Gemini AI**.
+- **Persistent Memory:** RootBot tracks conversational context seamlessly by saving threads continuously into MongoDB, featuring a native 30-day auto-deletion (TTL) rule.
+- **Cross-Page Navigation:** The chatbot tracks its precise state in your browser, maintaining its exact flow as you navigate from the dashboard to different modules.
+
 ### 🎪 Event Management
 - **Creation & Joining:** Make custom events producing unique, shareable join codes.
 - **Collaborative Ecosystem:** Invite guests; support role-based access control (Admin, Manager, Member).
@@ -67,7 +72,7 @@ EventFlow helps users elegantly handle everything from advanced guest list manag
 
 ## 🛠 Tech Stack
 
-- **Backend Logic:** Python, Flask server, PyMongo (optimized maxPoolSize for scale).
+- **Backend Logic:** Python, Flask server, PyMongo (optimized maxPoolSize for scale), and the Google GenAI SDK.
 - **Frontend Architecture:** HTML5, CSS3, JavaScript (Vanilla), and Jinja2 templating.
 - **Database Engine:** MongoDB (designed for clustered or serverless deployments).
 - **Deployments:** Production ready specifically for Vercel environments (via `vercel.json` and WSGI proxies).
@@ -100,6 +105,9 @@ Create a `.env` file in the root directory and populate it with the secrets nece
 # Flask Core
 SECRET_KEY=your_secure_secret_key_here
 DATABASE_URL=mongodb+srv://<username>:<password>@cluster.mongodb.net/event_app
+
+# Gemini API Key (For RootBot functionality)
+GEMINI_API_KEY=your_gemini_api_key_here
 
 # SMTP Emial Settings
 MAIL_SERVER=smtp.example.com

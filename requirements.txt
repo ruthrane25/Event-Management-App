@@ -27,4 +27,4 @@ flask-talisman
 flask-wtf
 pymongo
 Flask-Limiter
-google-generativeai
+google-genai

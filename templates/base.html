@@ -437,6 +437,7 @@
         }
     });
 </script>
+{% if current_user.is_authenticated %}
 <!-- RootBot UI -->
 <div class="chat-widget-btn" id="chatWidgetBtn" onclick="toggleChat()">
     <i class="fas fa-robot"></i>
@@ -460,10 +461,24 @@
 </div>
 
 <script>
-    let isChatOpen = false;
+    let isChatOpen = localStorage.getItem('rootbot_open') === 'true';
+    let chatHistoryLoaded = false;
 
-    function toggleChat() {
+    document.addEventListener('DOMContentLoaded', () => {
+        if (isChatOpen) {
+            const chatWindow = document.getElementById('chatWindow');
+            const icon = document.querySelector('#chatWidgetBtn i');
+            chatWindow.classList.add('active');
+            icon.classList.remove('fa-robot');
+            icon.classList.add('fa-times');
+            loadChatHistory();
+        }
+    });
+
+    async function toggleChat() {
         isChatOpen = !isChatOpen;
+        localStorage.setItem('rootbot_open', isChatOpen);
+        
         const chatWindow = document.getElementById('chatWindow');
         const icon = document.querySelector('#chatWidgetBtn i');
         
@@ -472,11 +487,36 @@
             icon.classList.remove('fa-robot');
             icon.classList.add('fa-times');
             setTimeout(() => document.getElementById('chatInput').focus(), 300);
+            
+            if (!chatHistoryLoaded) {
+                await loadChatHistory();
+            }
         } else {
             chatWindow.classList.remove('active');
             icon.classList.remove('fa-times');
             icon.classList.add('fa-robot');
         }
+    }
+    
+    async function loadChatHistory() {
+        chatHistoryLoaded = true;
+        try {
+            const res = await fetch('/api/chat/history');
+            if (res.ok) {
+                const data = await res.json();
+                const messagesBox = document.getElementById('chatMessages');
+                if (data.messages && data.messages.length > 0) {
+                    messagesBox.innerHTML = ''; // clear default greeting
+                    data.messages.forEach(msg => {
+                        const div = document.createElement('div');
+                        div.className = 'chat-msg ' + (msg.role === 'user' ? 'user' : 'bot');
+                        div.innerHTML = msg.text.replace(/\n/g, "<br>");
+                        messagesBox.appendChild(div);
+                    });
+                    messagesBox.scrollTop = messagesBox.scrollHeight;
+                }
+            }
+        } catch (e) { console.error('Failed to load history', e); }
     }
 
     function handleChatKey(e) {
@@ -551,6 +591,7 @@
         }
     }
 </script>
+{% endif %}
 {% block scripts %}{% endblock %}
 </body>
 </html>
